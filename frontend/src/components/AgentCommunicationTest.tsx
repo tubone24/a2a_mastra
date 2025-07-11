@@ -23,6 +23,7 @@ interface TestMessage {
 const AGENT_OPTIONS = [
   { value: 'data-processor', label: 'Data Processor', endpoint: 'http://data-processor:3002' },
   { value: 'summarizer', label: 'Summarizer', endpoint: 'http://summarizer:3003' },
+  { value: 'web-search', label: 'Web Search', endpoint: 'http://web-search:3004' },
 ]
 
 const SAMPLE_MESSAGES = {
@@ -33,6 +34,11 @@ const SAMPLE_MESSAGES = {
   'summarizer': [
     '{ "type": "summarize", "data": "Large data analysis result...", "audienceType": "executive" }',
     '{ "type": "executive-summary", "data": "Complex business data...", "audienceType": "executive" }',
+  ],
+  'web-search': [
+    '{ "type": "web-search", "query": "TypeScript 最新情報", "options": { "maxResults": 5 } }',
+    '{ "type": "news-search", "query": "人工知能 市場動向", "options": { "timeRange": "week" } }',
+    '{ "type": "scholarly-search", "query": "machine learning transformer", "options": { "language": "en" } }',
   ],
 }
 
@@ -66,11 +72,15 @@ export function AgentCommunicationTest() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          type: selectedAgent === 'data-processor' ? 'process' : 'summarize',
-          data: message,
-          context: { source: 'agent-communication-test' }
-        }),
+        body: JSON.stringify(
+          selectedAgent === 'web-search' 
+            ? JSON.parse(message) // For web search, parse the full message JSON
+            : {
+                type: selectedAgent === 'data-processor' ? 'process' : 'summarize',
+                data: message,
+                context: { source: 'agent-communication-test' }
+              }
+        ),
       })
 
       const duration = Date.now() - startTime

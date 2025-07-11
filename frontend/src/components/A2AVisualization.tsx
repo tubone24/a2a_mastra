@@ -2,13 +2,13 @@
 
 import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Bot, Database, FileText, ArrowDown, Loader2, CheckCircle2 } from "lucide-react"
+import { Bot, Database, FileText, Search, ArrowDown, Loader2, CheckCircle2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface A2AStep {
   id: string
-  agent: 'gateway' | 'data-processor' | 'summarizer'
-  action: 'routing' | 'processing' | 'summarizing' | 'responding'
+  agent: 'gateway' | 'data-processor' | 'summarizer' | 'web-search'
+  action: 'routing' | 'processing' | 'summarizing' | 'searching' | 'responding'
   status: 'pending' | 'active' | 'completed'
   message: string
   timestamp: number
@@ -23,7 +23,7 @@ interface A2AStep {
 
 interface A2AVisualizationProps {
   isActive: boolean
-  taskType: 'process' | 'summarize' | 'analyze' | null
+  taskType: 'process' | 'summarize' | 'analyze' | 'web-search' | 'news-search' | 'scholarly-search' | null
   onStepUpdate?: (step: A2AStep) => void
 }
 
@@ -40,6 +40,8 @@ export function A2AVisualization({ isActive, taskType, onStepUpdate }: A2AVisual
         return <Database className="h-4 w-4" />
       case 'summarizer':
         return <FileText className="h-4 w-4" />
+      case 'web-search':
+        return <Search className="h-4 w-4" />
       default:
         return <Bot className="h-4 w-4" />
     }
@@ -53,12 +55,14 @@ export function A2AVisualization({ isActive, taskType, onStepUpdate }: A2AVisual
         return 'Data Processor'
       case 'summarizer':
         return 'Summarizer'
+      case 'web-search':
+        return 'Web Search Agent'
       default:
         return 'Unknown Agent'
     }
   }
 
-  const getStepsForTaskType = (type: 'process' | 'summarize' | 'analyze'): Omit<A2AStep, 'timestamp' | 'status'>[] => {
+  const getStepsForTaskType = (type: 'process' | 'summarize' | 'analyze' | 'web-search' | 'news-search' | 'scholarly-search'): Omit<A2AStep, 'timestamp' | 'status'>[] => {
     const baseSteps = [
       {
         id: 'gateway-routing',
@@ -129,6 +133,25 @@ export function A2AVisualization({ isActive, taskType, onStepUpdate }: A2AVisual
             agent: 'gateway' as const,
             action: 'responding' as const,
             message: 'A2A getTask()で最終結果を取得し、ユーザーに返却中...'
+          }
+        ]
+      
+      case 'web-search':
+      case 'news-search':
+      case 'scholarly-search':
+        return [
+          ...baseSteps,
+          {
+            id: 'web-search-searching',
+            agent: 'web-search' as const,
+            action: 'searching' as const,
+            message: 'A2A sendMessage()でMCP経由のWeb検索を実行中...'
+          },
+          {
+            id: 'gateway-responding',
+            agent: 'gateway' as const,
+            action: 'responding' as const,
+            message: 'A2A getTask()で検索結果を取得し、ユーザーに返却中...'
           }
         ]
       
@@ -221,6 +244,36 @@ export function A2AVisualization({ isActive, taskType, onStepUpdate }: A2AVisual
               }
             }
           }
+        case 'web-search-searching':
+          return {
+            ...baseDetails,
+            endpoint: '/api/a2a/message',
+            request: {
+              id: crypto.randomUUID(),
+              from: 'gateway-agent-01',
+              message: {
+                role: 'user',
+                parts: [{ type: 'text', text: JSON.stringify({ type: taskType, query: 'sample search query' }) }]
+              },
+              timestamp: new Date().toISOString()
+            },
+            response: {
+              id: crypto.randomUUID(),
+              from: 'web-search-agent-01',
+              task: {
+                id: crypto.randomUUID(),
+                status: { state: 'completed', message: 'Search completed' },
+                result: { 
+                  status: 'completed', 
+                  result: {
+                    query: 'sample search query',
+                    results: [{ title: 'Sample Result', url: 'https://example.com', snippet: 'Sample content...' }],
+                    summary: 'Web検索結果の要約...'
+                  }
+                }
+              }
+            }
+          }
         default:
           return baseDetails
       }
@@ -294,26 +347,6 @@ export function A2AVisualization({ isActive, taskType, onStepUpdate }: A2AVisual
             <div className="text-center text-sm text-muted-foreground py-4">
               タスク実行時にA2A通信フローが表示されます
             </div>
-            
-            <div className="p-3 bg-green-50 rounded-md">
-              <div className="text-xs text-green-700 space-y-1">
-                <div className="font-medium">実装済みA2A機能:</div>
-                <div>✓ Mastra A2A Client統合</div>
-                <div>✓ エージェント間メッセージング</div>
-                <div>✓ タスクライフサイクル管理</div>
-                <div>✓ エージェント発見機能</div>
-                <div>✓ ストリーミング対応準備</div>
-              </div>
-            </div>
-            
-            <div className="p-3 bg-blue-50 rounded-md">
-              <div className="text-xs text-blue-700 space-y-1">
-                <div className="font-medium">📄 新機能:</div>
-                <div>• 完了したステップをクリックで詳細表示</div>
-                <div>• A2Aリクエスト・レスポンスの中身を確認</div>
-                <div>• エージェント間通信のリアルタイム可視化</div>
-              </div>
-            </div>
           </div>
         )}
         
@@ -374,6 +407,9 @@ export function A2AVisualization({ isActive, taskType, onStepUpdate }: A2AVisual
                   {taskType === 'process' && 'データ処理中...'}
                   {taskType === 'summarize' && '要約作成中...'}
                   {taskType === 'analyze' && '分析ワークフロー実行中...'}
+                  {taskType === 'web-search' && 'Web検索実行中...'}
+                  {taskType === 'news-search' && 'ニュース検索実行中...'}
+                  {taskType === 'scholarly-search' && '学術検索実行中...'}
                 </span>
               </div>
             </div>

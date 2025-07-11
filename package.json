@@ -6,7 +6,8 @@
   "workspaces": [
     "agents/gateway",
     "agents/data-processor",
-    "agents/summarizer"
+    "agents/summarizer",
+    "agents/web-search"
   ],
   "scripts": {
     "dev": "docker-compose up",

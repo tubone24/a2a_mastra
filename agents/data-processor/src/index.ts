@@ -4,7 +4,7 @@ import { Agent } from '@mastra/core';
 import { getBedrockModel } from './config/bedrock.js';
 import { z } from 'zod';
 import dotenv from 'dotenv';
-import { LangfuseExporter } from 'langfuse-vercel';
+import { Langfuse } from 'langfuse';
 
 dotenv.config();
 
@@ -33,27 +33,22 @@ const dataProcessorAgent = new Agent({
   model: getBedrockModel(),
 });
 
-// Initialize Mastra with Langfuse telemetry and register agent
-console.log('Initializing Mastra with Langfuse config:', {
-  publicKey: process.env.LANGFUSE_PUBLIC_KEY ? 'SET' : 'NOT SET',
-  secretKey: process.env.LANGFUSE_SECRET_KEY ? 'SET' : 'NOT SET',
-  baseUrl: process.env.LANGFUSE_BASEURL
+// Initialize Langfuse client for tracing
+const langfuse = new Langfuse({
+  publicKey: process.env.LANGFUSE_PUBLIC_KEY,
+  secretKey: process.env.LANGFUSE_SECRET_KEY,
+  baseUrl: process.env.LANGFUSE_BASEURL || 'https://cloud.langfuse.com',
 });
 
+console.log('Langfuse client initialized:', {
+  publicKey: process.env.LANGFUSE_PUBLIC_KEY ? 'SET' : 'NOT SET',
+  secretKey: process.env.LANGFUSE_SECRET_KEY ? 'SET' : 'NOT SET',
+  baseUrl: process.env.LANGFUSE_BASEURL || 'https://cloud.langfuse.com'
+});
+
+// Initialize Mastra with agent
 const mastra = new Mastra({
   agents: { dataProcessorAgent }, // Register the agent
-  telemetry: {
-    serviceName: "ai", // Must be set to "ai" for Langfuse
-    enabled: true,
-    export: {
-      type: "custom",
-      exporter: new LangfuseExporter({
-        publicKey: process.env.LANGFUSE_PUBLIC_KEY,
-        secretKey: process.env.LANGFUSE_SECRET_KEY,
-        baseUrl: process.env.LANGFUSE_BASEURL,
-      }),
-    },
-  },
 });
 
 console.log('Mastra initialized successfully with agent registered');
@@ -69,8 +64,31 @@ const processTaskSchema = z.object({
 const tasks = new Map();
 
 // Helper function to process tasks
-async function processTask(task: any, taskId: string) {
+async function processTask(task: any, taskId: string, parentTraceId?: string) {
+  // Create Langfuse trace for this processing task
+  const trace = langfuse.trace({
+    id: parentTraceId || undefined,
+    name: 'data-processing-task',
+    metadata: {
+      agent: AGENT_NAME,
+      agentId: AGENT_ID,
+      taskId: taskId,
+      taskType: task?.type || 'unknown',
+    },
+    tags: ['data-processor', 'processing-task'],
+  });
+
   const validatedTask = processTaskSchema.parse(task);
+  
+  // Log task validation
+  trace.event({
+    name: 'task-validated',
+    metadata: {
+      type: validatedTask.type,
+      dataSize: JSON.stringify(validatedTask.data).length,
+      hasContext: !!validatedTask.context,
+    },
+  });
   
   let prompt = '';
   let processedResult;
@@ -116,23 +134,69 @@ async function processTask(task: any, taskId: string) {
       throw new Error(`Unknown task type: ${validatedTask.type}`);
   }
   
-  // Use Mastra Agent to process the data (enables Langfuse tracing)
+  // Use Mastra Agent to process the data with Langfuse tracing
   console.log('Calling dataProcessorAgent.generate() with prompt length:', prompt.length);
-  const result = await dataProcessorAgent.generate([
-    { role: "user", content: prompt }
-  ]);
-  console.log('Agent response received, length:', result.text.length);
   
-  processedResult = {
-    status: 'completed',
-    processedBy: AGENT_ID,
-    result: result.text,
+  const generation = trace.generation({
+    name: 'data-processing-llm-call',
+    model: 'bedrock-claude',
+    input: [{ role: "user", content: prompt }],
     metadata: {
-      completedAt: new Date().toISOString(),
+      promptLength: prompt.length,
       processingType: validatedTask.type,
-      originalDataSize: JSON.stringify(validatedTask.data).length,
     },
-  };
+  });
+  
+  try {
+    const result = await dataProcessorAgent.generate([
+      { role: "user", content: prompt }
+    ]);
+    console.log('Agent response received, length:', result.text.length);
+    
+    generation.end({
+      output: result.text,
+      metadata: {
+        responseLength: result.text.length,
+        usage: result.usage || {},
+      },
+    });
+    
+    processedResult = {
+      status: 'completed',
+      processedBy: AGENT_ID,
+      result: result.text,
+      metadata: {
+        completedAt: new Date().toISOString(),
+        processingType: validatedTask.type,
+        originalDataSize: JSON.stringify(validatedTask.data).length,
+        traceId: trace.id,
+      },
+    };
+    
+    // Log successful completion
+    trace.event({
+      name: 'processing-completed',
+      metadata: {
+        resultSize: result.text.length,
+        success: true,
+      },
+    });
+    
+  } catch (error) {
+    generation.end({
+      output: { error: error instanceof Error ? error.message : 'Unknown error' },
+    });
+    
+    trace.event({
+      name: 'processing-failed',
+      metadata: {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        errorType: error instanceof Error ? error.constructor.name : 'Unknown',
+      },
+    });
+    
+    throw error;
+  }
   
   // Store task result
   tasks.set(taskId, {
@@ -338,8 +402,79 @@ app.get('/api/agent', (req, res) => {
   });
 });
 
+// Task History API Endpoints
+
+// Get all tasks processed by this agent
+app.get('/api/tasks', (req, res) => {
+  const page = parseInt(req.query.page as string) || 1;
+  const limit = parseInt(req.query.limit as string) || 10;
+  const status = req.query.status as string;
+  
+  let taskList = Array.from(tasks.values());
+  
+  // Apply filters
+  if (status) {
+    taskList = taskList.filter(t => t.status.state === status);
+  }
+  
+  // Sort by most recent first
+  taskList.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  
+  // Pagination
+  const startIndex = (page - 1) * limit;
+  const endIndex = startIndex + limit;
+  const paginatedTasks = taskList.slice(startIndex, endIndex);
+  
+  res.json({
+    tasks: paginatedTasks,
+    pagination: {
+      page,
+      limit,
+      total: taskList.length,
+      totalPages: Math.ceil(taskList.length / limit),
+      hasNext: endIndex < taskList.length,
+      hasPrev: page > 1,
+    },
+    statistics: {
+      total: taskList.length,
+      completed: taskList.filter(t => t.status.state === 'completed').length,
+      failed: taskList.filter(t => t.status.state === 'failed').length,
+      working: taskList.filter(t => t.status.state === 'working').length,
+    },
+  });
+});
+
+// Get specific task details
+app.get('/api/tasks/:taskId', (req, res) => {
+  const { taskId } = req.params;
+  
+  const task = tasks.get(taskId);
+  if (!task) {
+    return res.status(404).json({
+      error: 'Task not found',
+      taskId
+    });
+  }
+  
+  res.json(task);
+});
+
+// Graceful shutdown handler
+process.on('SIGINT', async () => {
+  console.log('Shutting down gracefully...');
+  await langfuse.shutdownAsync();
+  process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+  console.log('Shutting down gracefully...');
+  await langfuse.shutdownAsync();
+  process.exit(0);
+});
+
 // Start server
 app.listen(PORT, () => {
   console.log(`${AGENT_NAME} (${AGENT_ID}) listening on port ${PORT}`);
   console.log(`A2A Protocol endpoints available at http://localhost:${PORT}/api/a2a/`);
+  console.log(`Langfuse tracing enabled`);
 });

@@ -1,6 +1,6 @@
 export interface TaskRequest {
   id: string;
-  type: 'process' | 'summarize' | 'analyze';
+  type: 'process' | 'summarize' | 'analyze' | 'web-search' | 'news-search' | 'scholarly-search';
   payload: {
     data: any;
     context?: Record<string, any>;
@@ -25,7 +25,7 @@ export interface TaskResponse {
 export interface AgentInfo {
   id: string;
   name: string;
-  type: 'gateway' | 'processor' | 'summarizer';
+  type: 'gateway' | 'processor' | 'summarizer' | 'web-search';
   capabilities: string[];
   endpoint: string;
   status: 'online' | 'offline';
@@ -57,7 +57,7 @@ export interface WorkflowStep {
 export interface WorkflowExecution {
   id: string;
   requestId: string;
-  type: 'process' | 'summarize' | 'analyze';
+  type: 'process' | 'summarize' | 'analyze' | 'web-search' | 'news-search' | 'scholarly-search';
   status: 'pending' | 'in_progress' | 'completed' | 'failed' | 'partial';
   steps: WorkflowStep[];
   metadata: {

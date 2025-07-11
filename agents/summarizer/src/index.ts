@@ -4,7 +4,7 @@ import { Agent } from '@mastra/core';
 import { getBedrockModel } from './config/bedrock.js';
 import { z } from 'zod';
 import dotenv from 'dotenv';
-import { LangfuseExporter } from 'langfuse-vercel';
+import { Langfuse } from 'langfuse';
 
 dotenv.config();
 
@@ -33,21 +33,16 @@ const summarizerAgent = new Agent({
   model: getBedrockModel(),
 });
 
-// Initialize Mastra with Langfuse telemetry and register agent
+// Initialize Langfuse client for tracing
+const langfuse = new Langfuse({
+  publicKey: process.env.LANGFUSE_PUBLIC_KEY,
+  secretKey: process.env.LANGFUSE_SECRET_KEY,
+  baseUrl: process.env.LANGFUSE_BASEURL || 'https://cloud.langfuse.com',
+});
+
+// Initialize Mastra with agent
 const mastra = new Mastra({
   agents: { summarizerAgent }, // Register the agent
-  telemetry: {
-    serviceName: "ai", // Must be set to "ai" for Langfuse
-    enabled: true,
-    export: {
-      type: "custom",
-      exporter: new LangfuseExporter({
-        publicKey: process.env.LANGFUSE_PUBLIC_KEY,
-        secretKey: process.env.LANGFUSE_SECRET_KEY,
-        baseUrl: process.env.LANGFUSE_BASEURL,
-      }),
-    },
-  },
 });
 
 // Task schema for summarization
@@ -62,13 +57,36 @@ const summarizeTaskSchema = z.object({
 const tasks = new Map();
 
 // Helper function to process summarization tasks
-async function processSummarizationTask(task: any, taskId: string) {
+async function processSummarizationTask(task: any, taskId: string, parentTraceId?: string) {
+  // Create Langfuse trace for this summarization task
+  const trace = langfuse.trace({
+    id: parentTraceId || undefined,
+    name: 'summarization-task',
+    metadata: {
+      agent: AGENT_NAME,
+      agentId: AGENT_ID,
+      taskId: taskId,
+      taskType: task?.type || 'unknown',
+    },
+    tags: ['summarizer', 'summarization-task'],
+  });
+
   const validatedTask = summarizeTaskSchema.parse(task);
+  const audienceType = validatedTask.audienceType || 'general';
+  
+  // Log task validation
+  trace.event({
+    name: 'task-validated',
+    metadata: {
+      type: validatedTask.type,
+      audienceType: audienceType,
+      dataSize: JSON.stringify(validatedTask.data).length,
+      hasContext: !!validatedTask.context,
+    },
+  });
   
   let prompt = '';
   let summaryResult;
-  
-  const audienceType = validatedTask.audienceType || 'general';
   
   switch (validatedTask.type) {
     case 'summarize':
@@ -131,23 +149,73 @@ async function processSummarizationTask(task: any, taskId: string) {
       throw new Error(`Unknown task type: ${validatedTask.type}`);
   }
   
-  // Use Mastra Agent to create the summary (enables Langfuse tracing)
-  const result = await summarizerAgent.generate([
-    { role: "user", content: prompt }
-  ]);
+  // Use Mastra Agent to create the summary with Langfuse tracing
+  console.log('Calling summarizerAgent.generate() with prompt length:', prompt.length);
   
-  summaryResult = {
-    status: 'completed',
-    processedBy: AGENT_ID,
-    summary: result.text,
+  const generation = trace.generation({
+    name: 'summarization-llm-call',
+    model: 'bedrock-claude',
+    input: [{ role: "user", content: prompt }],
     metadata: {
-      completedAt: new Date().toISOString(),
+      promptLength: prompt.length,
       summaryType: validatedTask.type,
-      audienceType,
-      originalDataSize: JSON.stringify(validatedTask.data).length,
-      summaryLength: result.text.length,
+      audienceType: audienceType,
     },
-  };
+  });
+  
+  try {
+    const result = await summarizerAgent.generate([
+      { role: "user", content: prompt }
+    ]);
+    console.log('Agent response received, length:', result.text.length);
+    
+    generation.end({
+      output: result.text,
+      metadata: {
+        responseLength: result.text.length,
+        usage: result.usage || {},
+      },
+    });
+    
+    summaryResult = {
+      status: 'completed',
+      processedBy: AGENT_ID,
+      summary: result.text,
+      metadata: {
+        completedAt: new Date().toISOString(),
+        summaryType: validatedTask.type,
+        audienceType,
+        originalDataSize: JSON.stringify(validatedTask.data).length,
+        summaryLength: result.text.length,
+        traceId: trace.id,
+      },
+    };
+    
+    // Log successful completion
+    trace.event({
+      name: 'summarization-completed',
+      metadata: {
+        summaryLength: result.text.length,
+        success: true,
+        audienceType: audienceType,
+      },
+    });
+    
+  } catch (error) {
+    generation.end({
+      output: { error: error instanceof Error ? error.message : 'Unknown error' },
+    });
+    
+    trace.event({
+      name: 'summarization-failed',
+      metadata: {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        errorType: error instanceof Error ? error.constructor.name : 'Unknown',
+      },
+    });
+    
+    throw error;
+  }
   
   // Store task result
   tasks.set(taskId, {
@@ -319,6 +387,76 @@ app.get('/api/agent', (req, res) => {
   });
 });
 
+// Task History API Endpoints
+
+// Get all tasks processed by this agent
+app.get('/api/tasks', (req, res) => {
+  const page = parseInt(req.query.page as string) || 1;
+  const limit = parseInt(req.query.limit as string) || 10;
+  const status = req.query.status as string;
+  const type = req.query.type as string;
+  
+  let taskList = Array.from(tasks.values());
+  
+  // Apply filters
+  if (status) {
+    taskList = taskList.filter(t => t.status.state === status);
+  }
+  if (type && taskList.length > 0) {
+    taskList = taskList.filter(t => {
+      // Extract type from task result metadata if available
+      const taskType = t.result?.metadata?.summaryType;
+      return taskType === type;
+    });
+  }
+  
+  // Sort by most recent first
+  taskList.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  
+  // Pagination
+  const startIndex = (page - 1) * limit;
+  const endIndex = startIndex + limit;
+  const paginatedTasks = taskList.slice(startIndex, endIndex);
+  
+  res.json({
+    tasks: paginatedTasks,
+    pagination: {
+      page,
+      limit,
+      total: taskList.length,
+      totalPages: Math.ceil(taskList.length / limit),
+      hasNext: endIndex < taskList.length,
+      hasPrev: page > 1,
+    },
+    statistics: {
+      total: taskList.length,
+      completed: taskList.filter(t => t.status.state === 'completed').length,
+      failed: taskList.filter(t => t.status.state === 'failed').length,
+      working: taskList.filter(t => t.status.state === 'working').length,
+      byType: {
+        summarize: taskList.filter(t => t.result?.metadata?.summaryType === 'summarize').length,
+        'executive-summary': taskList.filter(t => t.result?.metadata?.summaryType === 'executive-summary').length,
+        brief: taskList.filter(t => t.result?.metadata?.summaryType === 'brief').length,
+      },
+    },
+  });
+});
+
+// Get specific task details
+app.get('/api/tasks/:taskId', (req, res) => {
+  const { taskId } = req.params;
+  
+  const task = tasks.get(taskId);
+  if (!task) {
+    return res.status(404).json({
+      error: 'Task not found',
+      taskId
+    });
+  }
+  
+  res.json(task);
+});
+
 // A2A Get Task endpoint
 app.get('/api/a2a/task/:taskId', (req, res) => {
   const { taskId } = req.params;
@@ -355,8 +493,22 @@ app.delete('/api/a2a/task/:taskId', (req, res) => {
   res.json(task);
 });
 
+// Graceful shutdown handler
+process.on('SIGINT', async () => {
+  console.log('Shutting down gracefully...');
+  await langfuse.shutdownAsync();
+  process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+  console.log('Shutting down gracefully...');
+  await langfuse.shutdownAsync();
+  process.exit(0);
+});
+
 // Start server
 app.listen(PORT, () => {
   console.log(`${AGENT_NAME} (${AGENT_ID}) listening on port ${PORT}`);
   console.log(`A2A Protocol endpoints available at http://localhost:${PORT}/api/a2a/`);
+  console.log(`Langfuse tracing enabled`);
 });

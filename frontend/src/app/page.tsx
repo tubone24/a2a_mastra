@@ -12,14 +12,14 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
-import { Loader2, Send, CheckCircle, AlertCircle, Bot, Database, FileText } from "lucide-react"
+import { Loader2, Send, CheckCircle, AlertCircle, Bot, Database, FileText, Search } from "lucide-react"
 import { A2AVisualization } from "@/components/A2AVisualization"
 import { AgentDiscovery } from "@/components/AgentDiscovery"
 import { AgentCommunicationTest } from "@/components/AgentCommunicationTest"
 
 const formSchema = z.object({
-  type: z.enum(['process', 'summarize', 'analyze']),
-  data: z.string().min(1, "データを入力してください"),
+  type: z.enum(['process', 'summarize', 'analyze', 'web-search', 'news-search', 'scholarly-search']),
+  data: z.string().min(1, "データまたは検索クエリを入力してください"),
   context: z.string().optional(),
   audienceType: z.enum(['technical', 'executive', 'general']).optional(),
 })
@@ -71,12 +71,16 @@ export default function HomePage() {
     try {
       const requestBody = {
         type: values.type,
-        data: values.data.startsWith('{') ? JSON.parse(values.data) : values.data,
+        data: values.type.includes('search') 
+          ? values.data  // For search tasks, use data as query
+          : (values.data.startsWith('{') ? JSON.parse(values.data) : values.data),
+        query: values.type.includes('search') ? values.data : undefined,
         context: values.context ? { description: values.context } : undefined,
         audienceType: values.audienceType,
       } as {
         type: string
         data: string | object
+        query?: string
         context?: { description: string }
         audienceType?: string
       }
@@ -111,6 +115,10 @@ export default function HomePage() {
         return <FileText className="h-4 w-4" />
       case 'analyze':
         return <Bot className="h-4 w-4" />
+      case 'web-search':
+      case 'news-search':
+      case 'scholarly-search':
+        return <Search className="h-4 w-4" />
       default:
         return <Bot className="h-4 w-4" />
     }
@@ -124,6 +132,12 @@ export default function HomePage() {
         return 'データの要約を作成します'
       case 'analyze':
         return 'データの分析と要約の両方を実行します'
+      case 'web-search':
+        return 'Webからリアルタイムの情報を検索します'
+      case 'news-search':
+        return '最新のニュース記事を検索します'
+      case 'scholarly-search':
+        return '学術論文や研究資料を検索します'
       default:
         return ''
     }
@@ -151,6 +165,10 @@ export default function HomePage() {
             <Badge variant="secondary" className="flex items-center gap-1">
               <FileText className="h-3 w-3" />
               Summarizer
+            </Badge>
+            <Badge variant="secondary" className="flex items-center gap-1">
+              <Search className="h-3 w-3" />
+              Web Search
             </Badge>
           </div>
         </div>
@@ -239,6 +257,24 @@ export default function HomePage() {
                                         分析ワークフロー
                                       </div>
                                     </SelectItem>
+                                    <SelectItem value="web-search">
+                                      <div className="flex items-center gap-2">
+                                        <Search className="h-4 w-4" />
+                                        Web検索
+                                      </div>
+                                    </SelectItem>
+                                    <SelectItem value="news-search">
+                                      <div className="flex items-center gap-2">
+                                        <Search className="h-4 w-4" />
+                                        ニュース検索
+                                      </div>
+                                    </SelectItem>
+                                    <SelectItem value="scholarly-search">
+                                      <div className="flex items-center gap-2">
+                                        <Search className="h-4 w-4" />
+                                        学術検索
+                                      </div>
+                                    </SelectItem>
                                   </SelectContent>
                                 </Select>
                                 <FormDescription>
@@ -257,13 +293,20 @@ export default function HomePage() {
                                 <FormLabel>データ</FormLabel>
                                 <FormControl>
                                   <Textarea
-                                    placeholder='例: {"sales": [100, 150, 200], "products": ["A", "B", "C"]}'
+                                    placeholder={
+                                      form.watch('type')?.includes('search') 
+                                        ? '例: TypeScript 最新情報, 人工知能 市場動向'
+                                        : '例: {"sales": [100, 150, 200], "products": ["A", "B", "C"]}'
+                                    }
                                     className="min-h-[100px]"
                                     {...field}
                                   />
                                 </FormControl>
                                 <FormDescription>
-                                  JSON形式またはテキスト形式でデータを入力してください
+                                  {form.watch('type')?.includes('search')
+                                    ? '検索クエリを日本語または英語で入力してください'
+                                    : 'JSON形式またはテキスト形式でデータを入力してください'
+                                  }
                                 </FormDescription>
                                 <FormMessage />
                               </FormItem>
@@ -382,6 +425,35 @@ export default function HomePage() {
                                   </pre>
                                 </div>
                               </div>
+                            ) : response.type.includes('search') && typeof response.result === 'object' && response.result && 'result' in response.result ? (
+                              <div className="space-y-3">
+                                <div>
+                                  <h5 className="font-medium text-slate-700">検索クエリ:</h5>
+                                  <p className="mt-1 text-sm text-slate-600">{(response.result as { result?: { query?: string } }).result?.query || 'N/A'}</p>
+                                </div>
+                                <div>
+                                  <h5 className="font-medium text-slate-700">検索結果要約:</h5>
+                                  <div className="mt-1 whitespace-pre-wrap text-sm text-slate-600">
+                                    {(response.result as { result?: { summary?: string } }).result?.summary || 'N/A'}
+                                  </div>
+                                </div>
+                                {(response.result as { result?: { results?: Array<{ title: string; url: string; snippet: string; source?: string }> } }).result?.results && (
+                                  <div>
+                                    <h5 className="font-medium text-slate-700">検索結果 ({(response.result as { result: { results: Array<unknown> } }).result.results.length}件):</h5>
+                                    <div className="mt-2 space-y-2 max-h-60 overflow-y-auto">
+                                      {(response.result as { result: { results: Array<{ title: string; url: string; snippet: string; source?: string }> } }).result.results.slice(0, 5).map((item, index: number) => (
+                                        <div key={index} className="border-l-2 border-blue-200 pl-3">
+                                          <h6 className="font-medium text-blue-900 text-sm">{item.title}</h6>
+                                          <p className="text-xs text-slate-600 mt-1">{item.snippet}</p>
+                                          <a href={item.url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline">
+                                            {item.source || item.url}
+                                          </a>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
                             ) : (
                               <pre className="whitespace-pre-wrap text-sm text-slate-600">
                                 {typeof response.result === 'string'
@@ -434,7 +506,7 @@ export default function HomePage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                   <div className="rounded-md bg-slate-50 p-3">
                     <h4 className="mb-2 font-medium">売上データ</h4>
                     <pre className="text-xs text-slate-600">
@@ -464,6 +536,30 @@ export default function HomePage() {
 20%の成長を記録しました。特に新製品
 ラインの好調な売れ行きが貢献しており、
 今後の展開が期待されます。`}
+                    </pre>
+                  </div>
+                  <div className="rounded-md bg-slate-50 p-3">
+                    <h4 className="mb-2 font-medium">Web検索クエリ</h4>
+                    <pre className="text-xs text-slate-600">
+{`TypeScript 5.0 新機能
+人工知能 最新動向 2024
+React Server Components 使い方`}
+                    </pre>
+                  </div>
+                  <div className="rounded-md bg-slate-50 p-3">
+                    <h4 className="mb-2 font-medium">ニュース検索クエリ</h4>
+                    <pre className="text-xs text-slate-600">
+{`OpenAI GPT-4 アップデート
+日本 AI政策 最新情報
+量子コンピュータ 商用化`}
+                    </pre>
+                  </div>
+                  <div className="rounded-md bg-slate-50 p-3">
+                    <h4 className="mb-2 font-medium">学術検索クエリ</h4>
+                    <pre className="text-xs text-slate-600">
+{`machine learning attention mechanism
+natural language processing transformer
+computer vision deep learning survey`}
                     </pre>
                   </div>
                 </div>

@@ -1,5 +1,5 @@
 {
-  "name": "@a2a-demo/gateway-agent",
+  "name": "@a2a-demo/web-search-agent",
   "version": "1.0.0",
   "type": "module",
   "main": "dist/index.js",
@@ -11,12 +11,14 @@
   "dependencies": {
     "@mastra/core": "latest",
     "@mastra/client-js": "latest",
+    "@mastra/mcp": "latest",
     "@ai-sdk/amazon-bedrock": "^2.2.11",
     "ai": "^4.0.0",
     "express": "^4.21.2",
     "zod": "^3.23.8",
     "dotenv": "^16.4.7",
-    "langfuse": "^3.37.6"
+    "langfuse": "^3.37.6",
+    "axios": "^1.7.9"
   },
   "devDependencies": {
     "@types/express": "^5.0.0",

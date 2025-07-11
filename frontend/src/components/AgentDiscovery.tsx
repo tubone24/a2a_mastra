@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Bot, Database, FileText, Activity, RefreshCw, CheckCircle, XCircle, Clock } from "lucide-react"
+import { Bot, Database, FileText, Search, Activity, RefreshCw, CheckCircle, XCircle, Clock } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface AgentInfo {
@@ -46,6 +46,8 @@ export function AgentDiscovery() {
         return <Database className="h-5 w-5" />
       case 'summarizer':
         return <FileText className="h-5 w-5" />
+      case 'web-search':
+        return <Search className="h-5 w-5" />
       default:
         return <Bot className="h-5 w-5" />
     }
@@ -261,7 +263,6 @@ export function AgentDiscovery() {
               <div className="font-medium">💡 エージェント発見について:</div>
               <div>• Gateway Agentが/api/a2a/agentsエンドポイント経由でエージェントを検索</div>
               <div>• 各エージェントの能力、対応タスク、プロトコル情報を表示</div>
-              <div>• 現在のステータスはモック状態（実際の接続確認は通信テストタブで可能）</div>
             </div>
           </div>
         )}

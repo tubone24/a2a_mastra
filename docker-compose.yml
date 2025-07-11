@@ -33,6 +33,7 @@ services:
       - BEDROCK_MODEL_ID=${BEDROCK_MODEL_ID}
       - DATA_PROCESSOR_URL=http://data-processor:3002
       - SUMMARIZER_URL=http://summarizer:3003
+      - WEB_SEARCH_URL=http://web-search:3004
       - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-default_public_key}
       - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-default_secret_key}
       - LANGFUSE_BASEURL=${LANGFUSE_BASEURL:-https://us.cloud.langfuse.com}
@@ -41,6 +42,7 @@ services:
     depends_on:
       - data-processor
       - summarizer
+      - web-search
     volumes:
       - ./agents/gateway/src:/app/src
 
@@ -93,6 +95,32 @@ services:
       - a2a-network
     volumes:
       - ./agents/summarizer/src:/app/src
+
+  # Web Search Agent - Real-time web search and information retrieval
+  web-search:
+    build:
+      context: ./agents/web-search
+      dockerfile: Dockerfile
+    container_name: a2a-web-search-agent
+    ports:
+      - "${WEB_SEARCH_PORT:-3004}:3004"
+    environment:
+      - NODE_ENV=development
+      - PORT=3004
+      - AGENT_ID=web-search-agent-01
+      - AGENT_NAME=Web Search Agent
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=${AWS_REGION}
+      - BEDROCK_MODEL_ID=${BEDROCK_MODEL_ID}
+      - BRAVE_SEARCH_API_KEY=${BRAVE_SEARCH_API_KEY}
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-default_public_key}
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-default_secret_key}
+      - LANGFUSE_BASEURL=${LANGFUSE_BASEURL:-https://us.cloud.langfuse.com}
+    networks:
+      - a2a-network
+    volumes:
+      - ./agents/web-search/src:/app/src
 
 networks:
   a2a-network:

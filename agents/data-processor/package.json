@@ -16,7 +16,7 @@
     "express": "^4.21.2",
     "zod": "^3.23.8",
     "dotenv": "^16.4.7",
-    "langfuse-vercel": "^3.37.6"
+    "langfuse": "^3.37.6"
   },
   "devDependencies": {
     "@types/express": "^5.0.0",

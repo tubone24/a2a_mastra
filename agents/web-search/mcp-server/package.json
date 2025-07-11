@@ -1,0 +1,25 @@
+{
+  "name": "@a2a-demo/brave-search-mcp-server",
+  "version": "1.0.0",
+  "type": "module",
+  "bin": {
+    "brave-search-mcp": "./dist/server.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "dev": "tsx watch src/server.ts"
+  },
+  "dependencies": {
+    "@mastra/mcp": "latest",
+    "@modelcontextprotocol/sdk": "latest",
+    "axios": "^1.7.9",
+    "zod": "^3.23.8",
+    "dotenv": "^16.4.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.20.3",
+    "typescript": "^5.5.0"
+  }
+}
