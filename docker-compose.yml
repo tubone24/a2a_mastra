@@ -33,6 +33,9 @@ services:
       - BEDROCK_MODEL_ID=${BEDROCK_MODEL_ID}
       - DATA_PROCESSOR_URL=http://data-processor:3002
       - SUMMARIZER_URL=http://summarizer:3003
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-default_public_key}
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-default_secret_key}
+      - LANGFUSE_BASEURL=${LANGFUSE_BASEURL:-https://us.cloud.langfuse.com}
     networks:
       - a2a-network
     depends_on:
@@ -58,6 +61,9 @@ services:
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - AWS_REGION=${AWS_REGION}
       - BEDROCK_MODEL_ID=${BEDROCK_MODEL_ID}
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-default_public_key}
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-default_secret_key}
+      - LANGFUSE_BASEURL=${LANGFUSE_BASEURL:-https://us.cloud.langfuse.com}
     networks:
       - a2a-network
     volumes:
@@ -80,6 +86,9 @@ services:
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - AWS_REGION=${AWS_REGION}
       - BEDROCK_MODEL_ID=${BEDROCK_MODEL_ID}
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-default_public_key}
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-default_secret_key}
+      - LANGFUSE_BASEURL=${LANGFUSE_BASEURL:-https://us.cloud.langfuse.com}
     networks:
       - a2a-network
     volumes:
@@ -88,3 +97,4 @@ services:
 networks:
   a2a-network:
     driver: bridge
+

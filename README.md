@@ -56,9 +56,27 @@ SUMMARIZER_PORT=3003
 
 # Bedrock Model Configuration
 BEDROCK_MODEL_ID=anthropic.claude-3-5-sonnet-20240620-v1:0
+
+# Langfuse Observability (SaaS版 - https://cloud.langfuse.com で取得)
+LANGFUSE_PUBLIC_KEY=pk-your-public-key-from-langfuse-dashboard
+LANGFUSE_SECRET_KEY=sk-your-secret-key-from-langfuse-dashboard
 ```
 
-### 2. アプリケーションの起動
+### 2. Langfuseの設定（オプション）
+
+AIエージェントの動作をトレースするためにLangfuseを設定できます：
+
+1. [Langfuse Cloud](https://cloud.langfuse.com)でアカウントを作成
+2. 新しいプロジェクトを作成
+3. Settings > API Keysから公開キーと秘密キーを取得
+4. `.env`ファイルに追加：
+
+```env
+LANGFUSE_PUBLIC_KEY=pk-lf-xxx...  # Langfuseダッシュボードから取得
+LANGFUSE_SECRET_KEY=sk-lf-xxx...  # Langfuseダッシュボードから取得
+```
+
+### 3. アプリケーションの起動
 
 ```bash
 # すべてのエージェントをビルド・起動
@@ -244,6 +262,7 @@ docker-compose logs -f summarizer
 
 3. **監視・ログ**
    - CloudWatchによるメトリクス収集
+   - Langfuseによる詳細なAIトレーシング（実装済み）
    - 分散トレーシング
 
 4. **セキュリティ**
