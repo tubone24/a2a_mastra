@@ -15,13 +15,13 @@ MastraのAgent-to-Agent (A2A)プロトコルを活用したデモアプリケー
 ## アーキテクチャ
 
 ```
-[User Request] 
+[Web UI (Next.js)] (Port 3000)
      ↓
 [Gateway Agent] (Port 3001)
      ↓ (A2A Protocol)
 [Data Processor Agent] (Port 3002) ← → [Summarizer Agent] (Port 3003)
      ↓
-[Response to User]
+[Response to User Interface]
 ```
 
 ## 必要な環境
@@ -48,7 +48,8 @@ AWS_ACCESS_KEY_ID=your-actual-access-key-id
 AWS_SECRET_ACCESS_KEY=your-actual-secret-access-key
 AWS_REGION=us-east-1
 
-# Agent Ports
+# Application Ports
+FRONTEND_PORT=3000
 GATEWAY_PORT=3001
 DATA_PROCESSOR_PORT=3002
 SUMMARIZER_PORT=3003
@@ -69,9 +70,19 @@ docker-compose up --build
 
 ## 使用方法
 
-### 基本的なAPIリクエスト
+### Webインターフェースを使用（推奨）
 
-Gateway Agent（`http://localhost:3001`）にリクエストを送信します：
+1. ブラウザで `http://localhost:3000` にアクセス
+2. 美しいWebインターフェースでA2Aエージェントと対話
+3. タスクタイプを選択：
+   - **データ処理**: データのクリーニングと処理
+   - **要約作成**: テキストの要約を生成
+   - **分析ワークフロー**: データ処理→要約の完全なワークフロー
+4. データを入力してリアルタイムで結果を確認
+
+### API経由での直接アクセス
+
+Gateway Agent（`http://localhost:3001`）にリクエストを送信することも可能です：
 
 #### 1. データ処理
 
@@ -130,9 +141,12 @@ curl -X POST http://localhost:3001/api/request \
 
 ### ヘルスチェック
 
-各エージェントの状態を確認：
+各サービスの状態を確認：
 
 ```bash
+# Frontend
+curl http://localhost:3000
+
 # Gateway Agent
 curl http://localhost:3001/health
 
@@ -174,6 +188,10 @@ curl http://localhost:3003/health
 ### ローカル開発
 
 ```bash
+# フロントエンドを開発モードで起動
+cd frontend
+npm run dev
+
 # 個別のエージェントを開発モードで起動
 cd agents/gateway
 npm run dev
@@ -188,10 +206,11 @@ npm run dev
 ### ログの確認
 
 ```bash
-# すべてのエージェントのログを表示
+# すべてのサービスのログを表示
 docker-compose logs -f
 
-# 特定のエージェントのログ
+# 特定のサービスのログ
+docker-compose logs -f frontend
 docker-compose logs -f gateway
 docker-compose logs -f data-processor
 docker-compose logs -f summarizer

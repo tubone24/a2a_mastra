@@ -1,4 +1,19 @@
 services:
+  # Frontend - Next.js Web Interface
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: a2a-frontend
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    environment:
+      - NODE_ENV=production
+    networks:
+      - a2a-network
+    depends_on:
+      - gateway
+
   # Gateway Agent - Entry point for all requests
   gateway:
     build:

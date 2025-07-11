@@ -24,15 +24,16 @@ const mastra = new Mastra({
 const summarizerAgent = new Agent({
   name: AGENT_NAME,
   instructions: `
-    You are a summarizer agent specialized in creating concise, meaningful summaries of processed data and analysis results.
-    Your role is to:
-    1. Receive processed data and analysis results from other agents via A2A protocol
-    2. Extract key insights and findings
-    3. Create executive summaries with actionable recommendations
-    4. Generate different types of summaries based on audience needs
-    5. Return well-structured summary reports to the requesting agent
+    あなたは処理済みデータと分析結果の簡潔で意味のある要約を作成することを専門とするサマライザーエージェントです。
+    あなたの役割は以下の通りです：
+    1. A2Aプロトコル経由で他のエージェントから処理済みデータと分析結果を受信する
+    2. 主要な洞察と発見事項を抽出する
+    3. 実行可能な推奨事項を含む経営陣向けサマリーを作成する
+    4. オーディエンスのニーズに基づいて異なるタイプの要約を生成する
+    5. 要求元のエージェントに適切に構造化された要約レポートを返す
     
-    Always focus on clarity, brevity, and actionable insights.
+    常に明確性、簡潔性、実行可能な洞察に焦点を当ててください。
+    すべての応答は日本語で行ってください。
   `,
   model: getBedrockModel(),
 });
@@ -60,52 +61,57 @@ app.post('/api/a2a/task', async (req, res) => {
     switch (task.type) {
       case 'summarize':
         prompt = `
-          Create a comprehensive summary of the following data and analysis:
+          以下のデータと分析の包括的な要約を作成してください：
           ${JSON.stringify(task.data, null, 2)}
           
-          Please provide:
-          1. A clear overview of the main findings
-          2. Key insights and patterns identified
-          3. Important statistics or metrics
-          4. Potential implications of the findings
-          5. Recommended next steps or actions
+          以下を提供してください：
+          1. 主要な発見事項の明確な概要
+          2. 特定された重要な洞察とパターン
+          3. 重要な統計やメトリクス
+          4. 発見事項の潜在的な影響
+          5. 推奨される次のステップやアクション
           
-          Target audience: ${audienceType}
-          Context: ${task.context ? JSON.stringify(task.context) : 'None provided'}
+          対象オーディエンス: ${audienceType}
+          コンテキスト: ${task.context ? JSON.stringify(task.context) : '提供されていません'}
           
-          Format the summary in a clear, structured manner appropriate for ${audienceType} audience.
+          ${audienceType}オーディエンスに適した明確で構造化された形式で要約をフォーマットしてください。
+          回答は必ず日本語で行ってください。
         `;
         break;
         
       case 'executive-summary':
         prompt = `
-          Create an executive summary of the following data and analysis:
+          以下のデータと分析のエグゼクティブサマリーを作成してください：
           ${JSON.stringify(task.data, null, 2)}
           
-          Please provide:
-          1. High-level overview (2-3 sentences)
-          2. Key business implications
-          3. Critical metrics or KPIs
-          4. Strategic recommendations
-          5. Risk factors or considerations
+          以下を提供してください：
+          1. 高レベルな概要（2-3文）
+          2. 主要なビジネスへの影響
+          3. 重要なメトリクスやKPI
+          4. 戦略的推奨事項
+          5. リスク要因や考慮事項
           
-          Keep it concise and business-focused. Maximum 200 words.
-          Context: ${task.context ? JSON.stringify(task.context) : 'None provided'}
+          簡潔でビジネスに焦点を当てた内容にしてください。最大200語。
+          コンテキスト: ${task.context ? JSON.stringify(task.context) : '提供されていません'}
+          
+          回答は必ず日本語で行ってください。
         `;
         break;
         
       case 'brief':
         prompt = `
-          Create a brief summary of the following data and analysis:
+          以下のデータと分析の簡潔な要約を作成してください：
           ${JSON.stringify(task.data, null, 2)}
           
-          Please provide:
-          1. One-sentence overview
-          2. Top 3 key findings
-          3. Primary recommendation
+          以下を提供してください：
+          1. 一文での概要
+          2. 上位3つの主要な発見事項
+          3. 主要な推奨事項
           
-          Keep it extremely concise. Maximum 100 words.
-          Context: ${task.context ? JSON.stringify(task.context) : 'None provided'}
+          極めて簡潔にまとめてください。最大100語。
+          コンテキスト: ${task.context ? JSON.stringify(task.context) : '提供されていません'}
+          
+          回答は必ず日本語で行ってください。
         `;
         break;
         

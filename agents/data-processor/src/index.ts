@@ -24,15 +24,16 @@ const mastra = new Mastra({
 const dataProcessorAgent = new Agent({
   name: AGENT_NAME,
   instructions: `
-    You are a data processor agent specialized in analyzing and processing structured and unstructured data.
-    Your role is to:
-    1. Receive data from other agents via A2A protocol
-    2. Analyze the data structure and content
-    3. Clean and normalize the data
-    4. Extract meaningful insights or patterns
-    5. Return processed results to the requesting agent
+    あなたは構造化および非構造化データの分析・処理を専門とするデータプロセッサーエージェントです。
+    あなたの役割は以下の通りです：
+    1. A2Aプロトコル経由で他のエージェントからデータを受信する
+    2. データ構造と内容を分析する
+    3. データをクリーニングし正規化する
+    4. 意味のある洞察やパターンを抽出する
+    5. 処理結果を要求元のエージェントに返す
     
-    Always provide detailed analysis and clear explanations of your processing steps.
+    常に詳細な分析と処理ステップの明確な説明を提供してください。
+    すべての応答は日本語で行ってください。
   `,
   model: getBedrockModel(),
 });
@@ -57,33 +58,37 @@ app.post('/api/a2a/task', async (req, res) => {
     switch (task.type) {
       case 'process':
         prompt = `
-          Process and analyze the following data:
+          以下のデータを処理・分析してください：
           ${JSON.stringify(task.data, null, 2)}
           
-          Please:
-          1. Identify the data structure and format
-          2. Clean and normalize any inconsistencies
-          3. Extract key patterns or insights
-          4. Provide a summary of findings
-          5. Return the processed data in a structured format
+          以下を実行してください：
+          1. データ構造とフォーマットを特定する
+          2. 不整合をクリーニングし正規化する
+          3. 主要なパターンや洞察を抽出する
+          4. 発見事項の要約を提供する
+          5. 処理済みデータを構造化された形式で返す
           
-          Context: ${task.context ? JSON.stringify(task.context) : 'None provided'}
+          コンテキスト: ${task.context ? JSON.stringify(task.context) : '提供されていません'}
+          
+          回答は必ず日本語で行ってください。
         `;
         break;
         
       case 'analyze':
         prompt = `
-          Perform deep analysis on the following data:
+          以下のデータに対して詳細な分析を実行してください：
           ${JSON.stringify(task.data, null, 2)}
           
-          Please:
-          1. Identify trends, patterns, and anomalies
-          2. Calculate relevant statistics if applicable
-          3. Provide insights and recommendations
-          4. Highlight potential data quality issues
-          5. Suggest next steps for further processing
+          以下を実行してください：
+          1. トレンド、パターン、異常値を特定する
+          2. 該当する統計値を計算する（該当する場合）
+          3. 洞察と推奨事項を提供する
+          4. 潜在的なデータ品質の問題を強調する
+          5. さらなる処理のための次のステップを提案する
           
-          Context: ${task.context ? JSON.stringify(task.context) : 'None provided'}
+          コンテキスト: ${task.context ? JSON.stringify(task.context) : '提供されていません'}
+          
+          回答は必ず日本語で行ってください。
         `;
         break;
         
