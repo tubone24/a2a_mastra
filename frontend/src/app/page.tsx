@@ -546,22 +546,6 @@ export default function HomePage() {
 React Server Components 使い方`}
                     </pre>
                   </div>
-                  <div className="rounded-md bg-slate-50 p-3">
-                    <h4 className="mb-2 font-medium">ニュース検索クエリ</h4>
-                    <pre className="text-xs text-slate-600">
-{`OpenAI GPT-4 アップデート
-日本 AI政策 最新情報
-量子コンピュータ 商用化`}
-                    </pre>
-                  </div>
-                  <div className="rounded-md bg-slate-50 p-3">
-                    <h4 className="mb-2 font-medium">学術検索クエリ</h4>
-                    <pre className="text-xs text-slate-600">
-{`machine learning attention mechanism
-natural language processing transformer
-computer vision deep learning survey`}
-                    </pre>
-                  </div>
                 </div>
               </CardContent>
             </Card>

@@ -19,6 +19,12 @@ const server = new MCPServer({
 
 // Start the server
 console.error('Starting Brave Search MCP server...');
+console.error('Available tools:', Object.keys({
+  brave_web_search: braveWebSearchTool,
+  brave_news_search: braveNewsSearchTool,
+}));
+console.error('Brave Search API Key present:', !!process.env.BRAVE_SEARCH_API_KEY);
+
 server.startStdio().then(() => {
   console.error('Brave Search MCP server started successfully');
 }).catch((error) => {

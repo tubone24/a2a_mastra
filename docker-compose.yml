@@ -99,8 +99,8 @@ services:
   # Web Search Agent - Real-time web search and information retrieval
   web-search:
     build:
-      context: ./agents/web-search
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./agents/web-search/Dockerfile
     container_name: a2a-web-search-agent
     ports:
       - "${WEB_SEARCH_PORT:-3004}:3004"

@@ -42,20 +42,20 @@ let webSearchAgent: Agent;
 let mastra: Mastra;
 
 
-// Initialize MCP Client to connect to the MCP server
+// Initialize MCP Client to connect to the standalone MCP server
 async function initializeMCPClient() {
   try {
     mcpClient = new MCPClient({
       servers: {
         'brave-search': {
           command: 'node',
-          args: [path.join(__dirname, '../mcp-server/dist/server.js')],
+          args: ['/app/standalone-mcp-server/dist/server.js'],
           env: {
             BRAVE_SEARCH_API_KEY: process.env.BRAVE_SEARCH_API_KEY || '',
           },
+          timeout: 30000,
         },
       },
-      timeout: 30000,
     });
 
     console.log('MCP Client initialized, getting tools...');
@@ -63,6 +63,14 @@ async function initializeMCPClient() {
     // Get available tools from MCP server
     const tools = await mcpClient.getTools();
     console.log('Available MCP tools:', Object.keys(tools));
+    
+    // Debug: Show tool details
+    for (const [toolName, tool] of Object.entries(tools)) {
+      console.log(`Tool: ${toolName}`, { 
+        description: (tool as any).description,
+        inputSchema: (tool as any).inputSchema 
+      });
+    }
 
     return tools;
   } catch (error) {
@@ -217,27 +225,36 @@ async function processSearchTask(task: any, taskId: string, parentTraceId?: stri
       // Use Mastra Agent with MCP tools to perform search
       console.log('Using Agent with MCP tools for search...');
       
-      // Create search prompt for the agent
+      // Create search prompt for the agent - use the correct tool names from standalone MCP server
+      const toolName = validatedTask.type === 'news-search' ? 'brave-search_brave_news_search' : 'brave-search_brave_web_search';
+      
+      const searchParams = {
+        query: enhancedQuery,
+        count: Math.min((searchOptions as any)?.maxResults || 10, 20)
+      };
+
+      console.log('Search parameters for tool:', searchParams);
+      console.log('Tool name to be used:', toolName);
+
       const searchPrompt = `
-        ${validatedTask.type === 'news-search' ? 'ニュース検索' : 'Web検索'}を実行してください。
+        検索クエリ「${enhancedQuery}」について${validatedTask.type === 'news-search' ? 'ニュース検索' : 'Web検索'}を実行してください。
 
-        検索クエリ: "${enhancedQuery}"
-        検索タイプ: ${validatedTask.type}
-        最大結果数: ${(searchOptions as any)?.maxResults || 10}
-        言語: ${(searchOptions as any)?.language || 'en'}
-        地域: ${(searchOptions as any)?.region || 'us'}
-        安全検索: ${(searchOptions as any)?.safesearch || 'moderate'}
-        時間範囲: ${(searchOptions as any)?.timeRange || 'all'}
+        必ず「${toolName}」ツールを使用して以下のパラメータで検索を実行してください：
+        
+        ツール名: ${toolName}
+        パラメータ:
+        {
+          "query": "${enhancedQuery}",
+          "count": ${searchParams.count}
+        }
 
-        以下の${validatedTask.type === 'news-search' ? 'brave_news_search' : 'brave_web_search'}ツールを使用して検索を実行し、結果を分析してください。
+        重要: 必ずツールを呼び出してください。ツールを使用せずに想像で回答しないでください。
 
-        結果として以下を提供してください：
+        ツール実行後、結果を基に以下を日本語で提供してください：
         1. 検索結果の要約（3-5文）
         2. 最も関連性の高い情報のハイライト
         3. 信頼性の評価
         4. 追加の検索が必要な場合の提案
-
-        回答は必ず日本語で行ってください。
       `;
 
       generation.end({
@@ -249,12 +266,21 @@ async function processSearchTask(task: any, taskId: string, parentTraceId?: stri
       });
 
       // Use agent to perform search and analysis
+      console.log('Sending prompt to agent:', searchPrompt);
+      console.log('Available tools:', Object.keys(mcpTools));
+      console.log('Expected tool name:', toolName);
+      console.log('Enhanced query:', enhancedQuery);
+      console.log('Search options:', searchOptions);
+      
       const result = await webSearchAgent.generate([
         { 
           role: "user", 
           content: searchPrompt
         }
       ]);
+
+      console.log('Agent result:', result);
+      console.log('Agent response text:', result.text);
 
       searchResult = {
         status: 'completed',
