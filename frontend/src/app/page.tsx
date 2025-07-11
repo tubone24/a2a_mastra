@@ -18,7 +18,7 @@ import { AgentDiscovery } from "@/components/AgentDiscovery"
 import { AgentCommunicationTest } from "@/components/AgentCommunicationTest"
 
 const formSchema = z.object({
-  type: z.enum(['process', 'summarize', 'analyze', 'web-search', 'news-search', 'scholarly-search']),
+  type: z.enum(['process', 'summarize', 'analyze', 'web-search', 'news-search', 'scholarly-search', 'deep-research']),
   data: z.string().min(1, "データまたは検索クエリを入力してください"),
   context: z.string().optional(),
   audienceType: z.enum(['technical', 'executive', 'general']).optional(),
@@ -54,6 +54,7 @@ export default function HomePage() {
   const [response, setResponse] = useState<ApiResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'demo' | 'discovery' | 'communication'>('demo')
+  const [taskProgress, setTaskProgress] = useState<{progress: number, phase: string} | null>(null)
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -65,13 +66,94 @@ export default function HomePage() {
     },
   })
 
+  const pollTaskStatus = async (taskId: string) => {
+    const maxAttempts = 60; // 最大10分間（10秒間隔）
+    let attempts = 0;
+
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api/a2a/task/${taskId}`);
+        if (res.ok) {
+          const taskData = await res.json();
+          
+          // 進捗情報を更新
+          if (taskData.progress !== undefined) {
+            setTaskProgress({
+              progress: taskData.progress,
+              phase: taskData.currentPhase || 'processing'
+            });
+          }
+
+          if (taskData.status === 'completed') {
+            // 完了時の応答形式を既存のAPIResponseに合わせる
+            setResponse({
+              status: 'success',
+              type: 'deep-research',
+              result: taskData.result,
+              metadata: {
+                completedAt: taskData.completedAt || new Date().toISOString(),
+                gateway: 'gateway-agent',
+                traceId: taskData.metadata?.traceId,
+                workflowExecutionId: taskData.workflowExecutionId,
+              }
+            });
+            setLoading(false);
+            setTaskProgress(null);
+            return;
+          } else if (taskData.status === 'failed') {
+            setError(`Deep Research failed: ${taskData.error || 'Unknown error'}`);
+            setLoading(false);
+            setTaskProgress(null);
+            return;
+          }
+        }
+
+        attempts++;
+        if (attempts < maxAttempts) {
+          setTimeout(poll, 10000); // 10秒後に再試行
+        } else {
+          setError('Deep Research timed out. The task may still be running.');
+          setLoading(false);
+          setTaskProgress(null);
+        }
+      } catch (error) {
+        console.error('Polling error:', error);
+        attempts++;
+        if (attempts < maxAttempts) {
+          setTimeout(poll, 10000);
+        } else {
+          setError('Failed to poll task status');
+          setLoading(false);
+          setTaskProgress(null);
+        }
+      }
+    };
+
+    // 初回ポーリングを開始
+    setTimeout(poll, 5000); // 5秒後に開始
+  };
+
   const onSubmit = async (values: FormData) => {
     setLoading(true)
     setError(null)
     setResponse(null)
 
     try {
-      const requestBody = {
+      // Deep Researchは新しいエンドポイントを使用
+      const isDeepResearch = values.type === 'deep-research';
+      const endpoint = isDeepResearch ? '/api/a2a/agents' : '/api/request';
+      
+      const requestBody = isDeepResearch ? {
+        type: values.type,
+        topic: values.data, // Deep Researchではtopicとして送信
+        options: {
+          depth: 'comprehensive',
+          sources: ['web', 'news'],
+          audienceType: values.audienceType || 'general',
+        },
+        context: values.context ? { description: values.context } : undefined,
+        audienceType: values.audienceType,
+      } : {
         type: values.type,
         data: values.type.includes('search') 
           ? values.data  // For search tasks, use data as query
@@ -79,19 +161,13 @@ export default function HomePage() {
         query: values.type.includes('search') ? values.data : undefined,
         context: values.context ? { description: values.context } : undefined,
         audienceType: values.audienceType,
-      } as {
-        type: string
-        data: string | object
-        query?: string
-        context?: { description: string }
-        audienceType?: string
-      }
+      };
 
       // タイムアウト付きのfetchを実装
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 120000) // 120秒のタイムアウト
+      const timeoutId = setTimeout(() => controller.abort(), isDeepResearch ? 600000 : 120000) // Deep Researchは10分
 
-      const res = await fetch('/api/request', {
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -108,7 +184,14 @@ export default function HomePage() {
       }
 
       const data = await res.json()
-      setResponse(data)
+      
+      // Deep Researchの場合は非同期処理
+      if (isDeepResearch && data.taskId) {
+        // タスクIDを受信したので、ポーリングを開始
+        pollTaskStatus(data.taskId)
+      } else {
+        setResponse(data)
+      }
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {
         setError('リクエストがタイムアウトしました。処理に時間がかかっています。')
@@ -132,6 +215,8 @@ export default function HomePage() {
       case 'news-search':
       case 'scholarly-search':
         return <Search className="h-4 w-4" />
+      case 'deep-research':
+        return <Bot className="h-4 w-4" />
       default:
         return <Bot className="h-4 w-4" />
     }
@@ -151,6 +236,8 @@ export default function HomePage() {
         return '最新のニュース記事を検索します'
       case 'scholarly-search':
         return '学術論文や研究資料を検索します'
+      case 'deep-research':
+        return '多段階の深い研究を実行します（非同期・長時間処理）'
       default:
         return ''
     }
@@ -288,6 +375,12 @@ export default function HomePage() {
                                         学術検索
                                       </div>
                                     </SelectItem>
+                                    <SelectItem value="deep-research">
+                                      <div className="flex items-center gap-2">
+                                        <Bot className="h-4 w-4" />
+                                        Deep Research
+                                      </div>
+                                    </SelectItem>
                                   </SelectContent>
                                 </Select>
                                 <FormDescription>
@@ -307,7 +400,9 @@ export default function HomePage() {
                                 <FormControl>
                                   <Textarea
                                     placeholder={
-                                      form.watch('type')?.includes('search') 
+                                      form.watch('type') === 'deep-research'
+                                        ? '例: AI in healthcare 2024, blockchain technology trends'
+                                        : form.watch('type')?.includes('search') 
                                         ? '例: TypeScript 最新情報, 人工知能 市場動向'
                                         : '例: {"sales": [100, 150, 200], "products": ["A", "B", "C"]}'
                                     }
@@ -316,7 +411,9 @@ export default function HomePage() {
                                   />
                                 </FormControl>
                                 <FormDescription>
-                                  {form.watch('type')?.includes('search')
+                                  {form.watch('type') === 'deep-research'
+                                    ? '研究トピックを英語または日本語で入力してください'
+                                    : form.watch('type')?.includes('search')
                                     ? '検索クエリを日本語または英語で入力してください'
                                     : 'JSON形式またはテキスト形式でデータを入力してください'
                                   }
@@ -494,7 +591,27 @@ export default function HomePage() {
                         <div className="flex h-32 items-center justify-center">
                           <div className="text-center">
                             <Loader2 className="mx-auto h-8 w-8 animate-spin text-slate-400" />
-                            <p className="mt-2 text-slate-500">エージェント間で処理中...</p>
+                            <p className="mt-2 text-slate-500">
+                              {taskProgress ? (
+                                <>
+                                  Deep Research実行中... ({taskProgress.progress}%)
+                                  <br />
+                                  <span className="text-xs text-slate-400">
+                                    フェーズ: {taskProgress.phase}
+                                  </span>
+                                </>
+                              ) : (
+                                'エージェント間で処理中...'
+                              )}
+                            </p>
+                            {taskProgress && (
+                              <div className="mt-3 w-full bg-gray-200 rounded-full h-2">
+                                <div 
+                                  className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
+                                  style={{ width: `${taskProgress.progress}%` }}
+                                ></div>
+                              </div>
+                            )}
                           </div>
                         </div>
                       )}
@@ -506,7 +623,7 @@ export default function HomePage() {
               <div className="lg:col-span-1">
                 <A2AVisualization
                   isActive={loading || Boolean(response)}
-                  taskType={loading ? form.getValues('type') : (response ? response.type as 'process' | 'summarize' | 'analyze' | 'web-search' | 'news-search' | 'scholarly-search' : null)}
+                  taskType={loading ? form.getValues('type') : (response ? response.type as 'process' | 'summarize' | 'analyze' | 'web-search' | 'news-search' | 'scholarly-search' | 'deep-research' : null)}
                   workflowExecutionId={response?.metadata?.workflowExecutionId}
                 />
               </div>

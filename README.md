@@ -75,7 +75,7 @@ graph TB
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/your-repo/a2a-mastra-demo.git
+git clone https://github.com/tubone24/a2a_mastra.git
 cd a2a-mastra-demo
 ```
 

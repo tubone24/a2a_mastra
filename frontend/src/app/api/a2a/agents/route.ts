@@ -1,5 +1,38 @@
 import { NextResponse } from 'next/server'
 
+export async function POST(request: Request) {
+  try {
+    const body = await request.json()
+    const gatewayUrl = process.env.GATEWAY_URL || 'http://gateway:3001'
+    
+    const response = await fetch(`${gatewayUrl}/api/a2a/agents`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(`Gateway response: ${response.status} ${response.statusText} - ${errorData.message || ''}`)
+    }
+
+    const data = await response.json()
+    return NextResponse.json(data)
+
+  } catch (error) {
+    console.error('Failed to submit task to gateway:', error)
+    return NextResponse.json(
+      { 
+        error: error instanceof Error ? error.message : 'Failed to submit task',
+        status: 'error'
+      },
+      { status: 500 }
+    )
+  }
+}
+
 export async function GET() {
   try {
     const gatewayUrl = process.env.GATEWAY_URL || 'http://gateway:3001'
