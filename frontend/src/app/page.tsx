@@ -55,6 +55,7 @@ export default function HomePage() {
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'demo' | 'discovery' | 'communication'>('demo')
   const [taskProgress, setTaskProgress] = useState<{progress: number, phase: string} | null>(null)
+  const [currentTaskId, setCurrentTaskId] = useState<string | null>(null)
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -99,11 +100,13 @@ export default function HomePage() {
             });
             setLoading(false);
             setTaskProgress(null);
+            setCurrentTaskId(null);
             return;
           } else if (taskData.status === 'failed') {
             setError(`Deep Research failed: ${taskData.error || 'Unknown error'}`);
             setLoading(false);
             setTaskProgress(null);
+            setCurrentTaskId(null);
             return;
           }
         }
@@ -115,6 +118,7 @@ export default function HomePage() {
           setError('Deep Research timed out. The task may still be running.');
           setLoading(false);
           setTaskProgress(null);
+          setCurrentTaskId(null);
         }
       } catch (error) {
         console.error('Polling error:', error);
@@ -125,6 +129,7 @@ export default function HomePage() {
           setError('Failed to poll task status');
           setLoading(false);
           setTaskProgress(null);
+          setCurrentTaskId(null);
         }
       }
     };
@@ -137,6 +142,8 @@ export default function HomePage() {
     setLoading(true)
     setError(null)
     setResponse(null)
+    setTaskProgress(null)
+    setCurrentTaskId(null)
 
     try {
       // Deep Researchは新しいエンドポイントを使用
@@ -188,6 +195,7 @@ export default function HomePage() {
       // Deep Researchの場合は非同期処理
       if (isDeepResearch && data.taskId) {
         // タスクIDを受信したので、ポーリングを開始
+        setCurrentTaskId(data.taskId)
         pollTaskStatus(data.taskId)
       } else {
         setResponse(data)
@@ -199,7 +207,9 @@ export default function HomePage() {
         setError(err instanceof Error ? err.message : 'エラーが発生しました')
       }
     } finally {
-      setLoading(false)
+      if (!form.getValues('type') || form.getValues('type') !== 'deep-research') {
+        setLoading(false)
+      }
     }
   }
 
@@ -466,11 +476,11 @@ export default function HomePage() {
                             )}
                           />
 
-                          <Button type="submit" className="w-full" disabled={loading}>
-                            {loading ? (
+                          <Button type="submit" className="w-full" disabled={loading || Boolean(currentTaskId)}>
+                            {loading || Boolean(currentTaskId) ? (
                               <>
                                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                処理中...
+                                {form.getValues('type') === 'deep-research' && currentTaskId ? 'Deep Research実行中...' : '処理中...'}
                               </>
                             ) : (
                               <>
@@ -507,14 +517,53 @@ export default function HomePage() {
                           <div className="flex items-center gap-2">
                             <Badge variant="outline" className="flex items-center gap-1">
                               {getTaskIcon(response.type)}
-                              {response.type}
+                              {response.type === 'deep-research' ? 'Deep Research' : response.type}
                             </Badge>
                             <Badge variant="secondary">{response.status}</Badge>
                           </div>
 
                           <div className="rounded-md bg-slate-50 p-4">
-                            <h4 className="mb-2 font-semibold">処理結果:</h4>
-                            {response.type === 'analyze' && typeof response.result === 'object' && response.result && 'workflow' in response.result ? (
+                            <h4 className="mb-2 font-semibold">
+                              {response.type === 'deep-research' ? 'Deep Research結果:' : '処理結果:'}
+                            </h4>
+                            {response.type === 'deep-research' && typeof response.result === 'object' ? (
+                              <div className="space-y-3">
+                                <div>
+                                  <h5 className="font-medium text-slate-700">エグゼクティブサマリー:</h5>
+                                  <pre className="mt-1 whitespace-pre-wrap text-sm text-slate-600">
+                                    {(response.result as Record<string, unknown>)?.executiveSummary as string || 'サマリーが生成されませんでした'}
+                                  </pre>
+                                </div>
+                                {Array.isArray((response.result as Record<string, unknown>)?.keyFindings) && (
+                                  <div>
+                                    <h5 className="font-medium text-slate-700">主要な発見:</h5>
+                                    <div className="mt-1 text-sm text-slate-600">
+                                      {((response.result as Record<string, unknown>).keyFindings as string[]).map((finding: string, index: number) => (
+                                        <div key={index} className="py-1">• {finding}</div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                                {Array.isArray((response.result as Record<string, unknown>)?.recommendations) && (
+                                  <div>
+                                    <h5 className="font-medium text-slate-700">推奨事項:</h5>
+                                    <div className="mt-1 text-sm text-slate-600">
+                                      {((response.result as Record<string, unknown>).recommendations as string[]).map((rec: string, index: number) => (
+                                        <div key={index} className="py-1">• {rec}</div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                                {typeof (response.result as Record<string, unknown>)?.fullReport === 'string' && (
+                                  <div>
+                                    <h5 className="font-medium text-slate-700">詳細レポート:</h5>
+                                    <pre className="mt-1 whitespace-pre-wrap text-sm text-slate-600 max-h-60 overflow-y-auto">
+                                      {(response.result as Record<string, unknown>).fullReport as string}
+                                    </pre>
+                                  </div>
+                                )}
+                              </div>
+                            ) : response.type === 'analyze' && typeof response.result === 'object' && response.result && 'workflow' in response.result ? (
                               <div className="space-y-3">
                                 <div>
                                   <h5 className="font-medium text-slate-700">データ処理結果:</h5>
@@ -581,25 +630,29 @@ export default function HomePage() {
                         </div>
                       )}
 
-                      {!response && !error && !loading && (
+                      {!response && !error && !loading && !currentTaskId && (
                         <div className="flex h-32 items-center justify-center text-slate-500">
                           <p>リクエストを送信すると結果がここに表示されます</p>
                         </div>
                       )}
 
-                      {loading && (
+                      {(loading || currentTaskId) && (
                         <div className="flex h-32 items-center justify-center">
                           <div className="text-center">
                             <Loader2 className="mx-auto h-8 w-8 animate-spin text-slate-400" />
                             <p className="mt-2 text-slate-500">
-                              {taskProgress ? (
+                              {taskProgress && currentTaskId ? (
                                 <>
                                   Deep Research実行中... ({taskProgress.progress}%)
                                   <br />
                                   <span className="text-xs text-slate-400">
-                                    フェーズ: {taskProgress.phase}
+                                    フェーズ: {taskProgress.phase === 'search' ? 'Web検索' : 
+                                               taskProgress.phase === 'analyze' ? 'データ分析' :
+                                               taskProgress.phase === 'synthesize' ? '結果統合' : taskProgress.phase}
                                   </span>
                                 </>
+                              ) : currentTaskId ? (
+                                'Deep Research開始中...'
                               ) : (
                                 'エージェント間で処理中...'
                               )}
@@ -625,6 +678,8 @@ export default function HomePage() {
                   isActive={loading || Boolean(response)}
                   taskType={loading ? form.getValues('type') : (response ? response.type as 'process' | 'summarize' | 'analyze' | 'web-search' | 'news-search' | 'scholarly-search' | 'deep-research' : null)}
                   workflowExecutionId={response?.metadata?.workflowExecutionId}
+                  taskId={currentTaskId || undefined}
+                  taskProgress={taskProgress}
                 />
               </div>
             </div>

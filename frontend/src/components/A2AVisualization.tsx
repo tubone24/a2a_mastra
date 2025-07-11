@@ -63,14 +63,36 @@ interface A2AVisualizationProps {
   taskType: 'process' | 'summarize' | 'analyze' | 'web-search' | 'news-search' | 'scholarly-search' | 'deep-research' | null
   workflowExecutionId?: string
   taskId?: string
+  taskProgress?: {progress: number, phase: string} | null
   onStepUpdate?: (step: A2AStep) => void
 }
 
-export function A2AVisualization({ isActive, taskType, workflowExecutionId, onStepUpdate }: A2AVisualizationProps) {
+export function A2AVisualization({ isActive, taskType, workflowExecutionId, taskId, taskProgress, onStepUpdate }: A2AVisualizationProps) {
   const [steps, setSteps] = useState<A2AStep[]>([])
   const [selectedStep, setSelectedStep] = useState<A2AStep | null>(null)
   const [showModal, setShowModal] = useState(false)
   const [realWorkflowData, setRealWorkflowData] = useState<WorkflowExecution | null>(null)
+  const [taskData, setTaskData] = useState<Record<string, unknown> | null>(null)
+
+  // Deep Researchタスクデータを取得する関数
+  const fetchTaskData = async (taskId: string) => {
+    console.log('🔍 Fetching Deep Research task data for task ID:', taskId)
+    try {
+      const response = await fetch(`/api/a2a/task/${taskId}`)
+      console.log('📡 Task API response status:', response.status)
+      if (response.ok) {
+        const taskData = await response.json()
+        console.log('✅ Task data received:', taskData)
+        setTaskData(taskData)
+        return taskData
+      } else {
+        console.log('❌ Task API returned error status:', response.status)
+      }
+    } catch (error) {
+      console.error('❌ Failed to fetch task data:', error)
+    }
+    return null
+  }
 
   // 実際のワークフローデータを取得する関数
   const fetchWorkflowData = async (executionId: string) => {
@@ -164,7 +186,69 @@ export function A2AVisualization({ isActive, taskType, workflowExecutionId, onSt
 
 
   useEffect(() => {
-    console.log('🚀 A2AVisualization useEffect triggered', { isActive, taskType, workflowExecutionId })
+    console.log('🚀 A2AVisualization useEffect triggered', { isActive, taskType, workflowExecutionId, taskId })
+    
+    // Deep Researchの場合は異なる表示ロジックを使用
+    if (taskType === 'deep-research' && taskId) {
+      console.log('🔬 Deep Research mode - using task polling visualization')
+      
+      // Deep Researchのフェーズに基づくステップ表示
+      const generateDeepResearchSteps = (progress: number, phase: string, taskData?: Record<string, unknown>) => {
+        const phases = ['search', 'analyze', 'synthesize']
+        const phaseNames = {
+          'search': 'Web検索フェーズ',
+          'analyze': 'データ分析フェーズ', 
+          'synthesize': '結果統合フェーズ'
+        }
+        
+        return phases.map((p, index) => {
+          let status: 'pending' | 'active' | 'completed'
+          if (phase === p) {
+            status = 'active'
+          } else if (phases.indexOf(phase) > index) {
+            status = 'completed'
+          } else {
+            status = 'pending'
+          }
+          
+          return {
+            id: `deep-research-${p}`,
+            agent: p === 'search' ? 'web-search' as const : 
+                   p === 'analyze' ? 'data-processor' as const : 
+                   'summarizer' as const,
+            action: p === 'search' ? 'searching' as const :
+                   p === 'analyze' ? 'processing' as const :
+                   'summarizing' as const,
+            status,
+            message: `${phaseNames[p as keyof typeof phaseNames]} ${status === 'active' ? `(${progress}%)` : ''}`,
+            timestamp: Date.now() - (3 - index) * 1000,
+            details: taskData && status === 'completed' ? {
+              request: `${p} phase request`,
+              response: (taskData.subTasks as Record<string, unknown>)?.[p] || `${p} completed`,
+              method: 'POST',
+              endpoint: '/api/a2a/task',
+              duration: 2000
+            } : undefined
+          }
+        })
+      }
+      
+      if (taskProgress) {
+        const steps = generateDeepResearchSteps(taskProgress.progress, taskProgress.phase, taskData || undefined)
+        setSteps(steps)
+      }
+      
+      // タスクデータを定期的に取得
+      if (isActive) {
+        const interval = setInterval(() => {
+          fetchTaskData(taskId)
+        }, 5000)
+        
+        return () => clearInterval(interval)
+      }
+      
+      return
+    }
     
     // workflowExecutionIdがある場合は常に表示（完了後も表示し続ける）
     if (!isActive && !workflowExecutionId) {
@@ -240,7 +324,7 @@ export function A2AVisualization({ isActive, taskType, workflowExecutionId, onSt
       setSteps([])
     }
 
-  }, [isActive, taskType, workflowExecutionId, onStepUpdate])
+  }, [isActive, taskType, workflowExecutionId, taskId, taskProgress, taskData, onStepUpdate])
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -256,13 +340,18 @@ export function A2AVisualization({ isActive, taskType, workflowExecutionId, onSt
   return (
     <Card className="h-fit">
       <CardHeader>
-        <CardTitle className="text-sm">A2A通信フロー</CardTitle>
+        <CardTitle className="text-sm">
+          {taskType === 'deep-research' ? 'Deep Research 実行状況' : 'A2A通信フロー'}
+        </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {!isActive && (
+        {!isActive && !taskId && (
           <div className="space-y-4">
             <div className="text-center text-sm text-muted-foreground py-4">
-              タスク実行時にA2A通信フローが表示されます
+              {taskType === 'deep-research' ? 
+                'Deep Research実行時に進捗状況が表示されます' : 
+                'タスク実行時にA2A通信フローが表示されます'
+              }
             </div>
           </div>
         )}
@@ -315,7 +404,7 @@ export function A2AVisualization({ isActive, taskType, workflowExecutionId, onSt
           </div>
         ))}
         
-        {(isActive || realWorkflowData) && taskType && (
+        {((isActive || realWorkflowData) && taskType && taskType !== 'deep-research') && (
           <div className="mt-4 space-y-3">
             {!realWorkflowData || realWorkflowData.status === 'in_progress' || realWorkflowData.status === 'pending' ? (
               <div className="p-3 bg-blue-50 rounded-md">
@@ -328,7 +417,6 @@ export function A2AVisualization({ isActive, taskType, workflowExecutionId, onSt
                     {taskType === 'web-search' && 'Web検索実行中...'}
                     {taskType === 'news-search' && 'ニュース検索実行中...'}
                     {taskType === 'scholarly-search' && '学術検索実行中...'}
-                    {taskType === 'deep-research' && 'Deep Research実行中...'}
                   </span>
                 </div>
               </div>
@@ -343,7 +431,6 @@ export function A2AVisualization({ isActive, taskType, workflowExecutionId, onSt
                     {taskType === 'web-search' && 'Web検索完了'}
                     {taskType === 'news-search' && 'ニュース検索完了'}
                     {taskType === 'scholarly-search' && '学術検索完了'}
-                    {taskType === 'deep-research' && 'Deep Research完了'}
                   </span>
                 </div>
               </div>
@@ -360,6 +447,41 @@ export function A2AVisualization({ isActive, taskType, workflowExecutionId, onSt
                 )}
                 {!realWorkflowData && workflowExecutionId && (
                   <div className="text-orange-600">• ワークフローデータの取得を試行中</div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Deep Research用の進捗表示 */}
+        {taskType === 'deep-research' && (isActive || taskId) && taskProgress && (
+          <div className="mt-4 space-y-3">
+            <div className="p-3 bg-blue-50 rounded-md">
+              <div className="flex items-center gap-2 text-sm text-blue-700 mb-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span className="font-medium">Deep Research実行中... ({taskProgress.progress}%)</span>
+              </div>
+              <div className="text-xs text-blue-600">
+                現在のフェーズ: {taskProgress.phase === 'search' ? 'Web検索' : 
+                              taskProgress.phase === 'analyze' ? 'データ分析' :
+                              taskProgress.phase === 'synthesize' ? '結果統合' : taskProgress.phase}
+              </div>
+              <div className="w-full bg-blue-200 rounded-full h-2 mt-2">
+                <div 
+                  className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
+                  style={{ width: `${taskProgress.progress}%` }}
+                ></div>
+              </div>
+            </div>
+            
+            <div className="p-3 bg-gray-50 rounded-md">
+              <div className="text-xs text-gray-600 space-y-1">
+                <div className="font-medium">🔍 Deep Research詳細:</div>
+                <div>• マルチエージェント協調による深い調査</div>
+                <div>• Web検索 → データ分析 → 結果統合の3段階</div>
+                <div>• 非同期タスク処理によるリアルタイム進捗表示</div>
+                {taskId && (
+                  <div className="text-blue-600 font-medium">• タスクID: {taskId}</div>
                 )}
               </div>
             </div>
