@@ -1,0 +1,75 @@
+services:
+  # Gateway Agent - Entry point for all requests
+  gateway:
+    build:
+      context: ./agents/gateway
+      dockerfile: Dockerfile
+    container_name: a2a-gateway-agent
+    ports:
+      - "${GATEWAY_PORT:-3001}:3001"
+    environment:
+      - NODE_ENV=development
+      - PORT=3001
+      - AGENT_ID=gateway-agent-01
+      - AGENT_NAME=Gateway Agent
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=${AWS_REGION}
+      - BEDROCK_MODEL_ID=${BEDROCK_MODEL_ID}
+      - DATA_PROCESSOR_URL=http://data-processor:3002
+      - SUMMARIZER_URL=http://summarizer:3003
+    networks:
+      - a2a-network
+    depends_on:
+      - data-processor
+      - summarizer
+    volumes:
+      - ./agents/gateway/src:/app/src
+
+  # Data Processor Agent - Handles data processing tasks
+  data-processor:
+    build:
+      context: ./agents/data-processor
+      dockerfile: Dockerfile
+    container_name: a2a-data-processor-agent
+    ports:
+      - "${DATA_PROCESSOR_PORT:-3002}:3002"
+    environment:
+      - NODE_ENV=development
+      - PORT=3002
+      - AGENT_ID=data-processor-agent-01
+      - AGENT_NAME=Data Processor Agent
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=${AWS_REGION}
+      - BEDROCK_MODEL_ID=${BEDROCK_MODEL_ID}
+    networks:
+      - a2a-network
+    volumes:
+      - ./agents/data-processor/src:/app/src
+
+  # Summarizer Agent - Summarizes processed data
+  summarizer:
+    build:
+      context: ./agents/summarizer
+      dockerfile: Dockerfile
+    container_name: a2a-summarizer-agent
+    ports:
+      - "${SUMMARIZER_PORT:-3003}:3003"
+    environment:
+      - NODE_ENV=development
+      - PORT=3003
+      - AGENT_ID=summarizer-agent-01
+      - AGENT_NAME=Summarizer Agent
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=${AWS_REGION}
+      - BEDROCK_MODEL_ID=${BEDROCK_MODEL_ID}
+    networks:
+      - a2a-network
+    volumes:
+      - ./agents/summarizer/src:/app/src
+
+networks:
+  a2a-network:
+    driver: bridge

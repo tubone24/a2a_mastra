@@ -1,0 +1,20 @@
+{
+  "name": "a2a-mastra-demo",
+  "version": "1.0.0",
+  "description": "Mastra A2A demo with multiple agents using Amazon Bedrock",
+  "private": true,
+  "workspaces": [
+    "agents/gateway",
+    "agents/data-processor",
+    "agents/summarizer"
+  ],
+  "scripts": {
+    "dev": "docker-compose up",
+    "build": "docker-compose build",
+    "stop": "docker-compose down"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.5.0"
+  }
+}
