@@ -2,6 +2,8 @@
 
 A demonstration of Agent-to-Agent (A2A) communication protocol using the Mastra framework, featuring multiple specialized AI agents powered by Amazon Bedrock. This project showcases how autonomous agents can communicate, collaborate, and delegate tasks to achieve complex goals.
 
+![demo](./docs/images/demo.gif)
+
 ## 🏗️ Architecture Overview
 
 The system consists of four specialized agents that communicate via the A2A protocol:
