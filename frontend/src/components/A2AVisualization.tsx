@@ -4,6 +4,43 @@ import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Bot, Database, FileText, Search, ArrowDown, Loader2, CheckCircle2 } from "lucide-react"
 import { cn } from "@/lib/utils"
+// import { WorkflowExecution, WorkflowStep } from "@shared/types"
+
+// 一時的に型定義をローカルに定義
+interface WorkflowStep {
+  id: string;
+  stepNumber: number;
+  agentId: string;
+  agentName: string;
+  operation: string;
+  input: unknown;
+  output?: unknown;
+  status: 'pending' | 'in_progress' | 'completed' | 'failed';
+  startedAt: string;
+  completedAt?: string;
+  duration?: number;
+  error?: string;
+  traceId?: string;
+}
+
+interface WorkflowExecution {
+  id: string;
+  requestId: string;
+  type: 'process' | 'summarize' | 'analyze';
+  status: 'pending' | 'in_progress' | 'completed' | 'failed' | 'partial';
+  steps: WorkflowStep[];
+  metadata: {
+    initiatedBy: string;
+    startedAt: string;
+    completedAt?: string;
+    totalDuration?: number;
+    dataSize?: number;
+    audienceType?: string;
+  };
+  result?: unknown;
+  error?: string;
+  langfuseTraceId?: string;
+}
 
 interface A2AStep {
   id: string
@@ -24,13 +61,75 @@ interface A2AStep {
 interface A2AVisualizationProps {
   isActive: boolean
   taskType: 'process' | 'summarize' | 'analyze' | 'web-search' | 'news-search' | 'scholarly-search' | null
+  workflowExecutionId?: string
   onStepUpdate?: (step: A2AStep) => void
 }
 
-export function A2AVisualization({ isActive, taskType, onStepUpdate }: A2AVisualizationProps) {
+export function A2AVisualization({ isActive, taskType, workflowExecutionId, onStepUpdate }: A2AVisualizationProps) {
   const [steps, setSteps] = useState<A2AStep[]>([])
   const [selectedStep, setSelectedStep] = useState<A2AStep | null>(null)
   const [showModal, setShowModal] = useState(false)
+  const [realWorkflowData, setRealWorkflowData] = useState<WorkflowExecution | null>(null)
+
+  // 実際のワークフローデータを取得する関数
+  const fetchWorkflowData = async (executionId: string) => {
+    console.log('🔍 Fetching workflow data for execution ID:', executionId)
+    try {
+      const response = await fetch(`http://localhost:3001/api/workflows/${executionId}`)
+      console.log('📡 Workflow API response status:', response.status)
+      if (response.ok) {
+        const workflowData: WorkflowExecution = await response.json()
+        console.log('✅ Workflow data received:', workflowData)
+        console.log('📊 Number of steps:', workflowData.steps.length)
+        setRealWorkflowData(workflowData)
+        return workflowData
+      } else {
+        console.log('❌ Workflow API returned error status:', response.status)
+      }
+    } catch (error) {
+      console.error('❌ Failed to fetch workflow data:', error)
+    }
+    return null
+  }
+
+  // WorkflowStepをA2AStepに変換する関数
+  const convertWorkflowStepToA2AStep = (workflowStep: WorkflowStep): A2AStep => {
+    // エージェント名からA2AStepのagent型にマッピング
+    const getAgentType = (agentName: string): 'gateway' | 'data-processor' | 'summarizer' | 'web-search' => {
+      if (agentName.includes('gateway')) return 'gateway'
+      if (agentName.includes('data-processor')) return 'data-processor'
+      if (agentName.includes('summarizer')) return 'summarizer'
+      if (agentName.includes('web-search')) return 'web-search'
+      return 'gateway' // デフォルト
+    }
+
+    // 操作からアクション型にマッピング
+    const getActionType = (operation: string): 'routing' | 'processing' | 'summarizing' | 'searching' | 'responding' => {
+      if (operation.includes('routing') || operation.includes('route')) return 'routing'
+      if (operation.includes('process') || operation.includes('analyzing')) return 'processing'
+      if (operation.includes('summariz')) return 'summarizing'
+      if (operation.includes('search')) return 'searching'
+      return 'responding' // デフォルト
+    }
+
+    return {
+      id: workflowStep.id,
+      agent: getAgentType(workflowStep.agentName),
+      action: getActionType(workflowStep.operation),
+      status: workflowStep.status === 'in_progress' ? 'active' : 
+              workflowStep.status === 'completed' ? 'completed' : 
+              workflowStep.status === 'failed' ? 'completed' : 'pending',
+      message: `${workflowStep.operation} - ${workflowStep.agentName}`,
+      timestamp: new Date(workflowStep.startedAt).getTime(),
+      details: {
+        request: workflowStep.input,
+        response: workflowStep.output,
+        endpoint: '/api/a2a/message',
+        method: 'POST',
+        duration: workflowStep.duration || 0
+      }
+    }
+  }
 
   const getAgentIcon = (agent: string) => {
     switch (agent) {
@@ -62,268 +161,85 @@ export function A2AVisualization({ isActive, taskType, onStepUpdate }: A2AVisual
     }
   }
 
-  const getStepsForTaskType = (type: 'process' | 'summarize' | 'analyze' | 'web-search' | 'news-search' | 'scholarly-search'): Omit<A2AStep, 'timestamp' | 'status'>[] => {
-    const baseSteps = [
-      {
-        id: 'gateway-routing',
-        agent: 'gateway' as const,
-        action: 'routing' as const,
-        message: 'A2A Clientでリクエストを受信し、適切なエージェントにルーティング中...'
-      }
-    ]
-
-    switch (type) {
-      case 'process':
-        return [
-          ...baseSteps,
-          {
-            id: 'data-processor-processing',
-            agent: 'data-processor' as const,
-            action: 'processing' as const,
-            message: 'A2A sendMessage()でデータ処理タスクを実行中...'
-          },
-          {
-            id: 'gateway-responding',
-            agent: 'gateway' as const,
-            action: 'responding' as const,
-            message: 'A2A getTask()で処理結果を取得し、ユーザーに返却中...'
-          }
-        ]
-      
-      case 'summarize':
-        return [
-          ...baseSteps,
-          {
-            id: 'summarizer-summarizing',
-            agent: 'summarizer' as const,
-            action: 'summarizing' as const,
-            message: 'A2A sendMessage()で要約作成タスクを実行中...'
-          },
-          {
-            id: 'gateway-responding',
-            agent: 'gateway' as const,
-            action: 'responding' as const,
-            message: 'A2A getTask()で要約結果を取得し、ユーザーに返却中...'
-          }
-        ]
-      
-      case 'analyze':
-        return [
-          ...baseSteps,
-          {
-            id: 'data-processor-processing',
-            agent: 'data-processor' as const,
-            action: 'processing' as const,
-            message: 'A2A sendMessage()でデータ詳細分析を実行中...'
-          },
-          {
-            id: 'gateway-forwarding',
-            agent: 'gateway' as const,
-            action: 'routing' as const,
-            message: 'A2A getTask()で分析結果を取得し、Summarizerに転送中...'
-          },
-          {
-            id: 'summarizer-summarizing',
-            agent: 'summarizer' as const,
-            action: 'summarizing' as const,
-            message: 'A2A sendMessage()で分析結果の要約を作成中...'
-          },
-          {
-            id: 'gateway-responding',
-            agent: 'gateway' as const,
-            action: 'responding' as const,
-            message: 'A2A getTask()で最終結果を取得し、ユーザーに返却中...'
-          }
-        ]
-      
-      case 'web-search':
-      case 'news-search':
-      case 'scholarly-search':
-        return [
-          ...baseSteps,
-          {
-            id: 'web-search-searching',
-            agent: 'web-search' as const,
-            action: 'searching' as const,
-            message: 'A2A sendMessage()でMCP経由のWeb検索を実行中...'
-          },
-          {
-            id: 'gateway-responding',
-            agent: 'gateway' as const,
-            action: 'responding' as const,
-            message: 'A2A getTask()で検索結果を取得し、ユーザーに返却中...'
-          }
-        ]
-      
-      default:
-        return baseSteps
-    }
-  }
 
   useEffect(() => {
-    if (!isActive || !taskType) {
+    console.log('🚀 A2AVisualization useEffect triggered', { isActive, taskType, workflowExecutionId })
+    
+    // workflowExecutionIdがある場合は常に表示（完了後も表示し続ける）
+    if (!isActive && !workflowExecutionId) {
+      console.log('❌ Early return: inactive and no workflowExecutionId')
       setSteps([])
+      setRealWorkflowData(null)
       return
     }
 
-    const stepTemplates = getStepsForTaskType(taskType)
-    const initialSteps = stepTemplates.map((step, index) => ({
-      ...step,
-      timestamp: Date.now() + index * 1000,
-      status: 'pending' as const
-    }))
-
-    setSteps(initialSteps)
-
-    // Generate sample A2A communication details
-    const generateStepDetails = (step: Omit<A2AStep, 'timestamp' | 'status'>, taskType: string) => {
-      const baseDetails = {
-        method: 'POST',
-        duration: Math.floor(Math.random() * 1000) + 200
-      }
-
-      switch (step.id) {
-        case 'gateway-routing':
-          return {
-            ...baseDetails,
-            endpoint: '/api/request',
-            request: {
-              type: taskType,
-              data: taskType === 'process' ? '[sample data]' : 'sample text data',
-              context: { source: 'ui' }
-            },
-            response: {
-              status: 'routing',
-              targetAgent: taskType === 'process' ? 'data-processor' : 'summarizer',
-              timestamp: new Date().toISOString()
-            }
-          }
-        case 'data-processor-processing':
-          return {
-            ...baseDetails,
-            endpoint: '/api/a2a/message',
-            request: {
-              id: crypto.randomUUID(),
-              from: 'gateway-agent-01',
-              message: {
-                role: 'user',
-                parts: [{ type: 'text', text: JSON.stringify({ type: 'process', data: '[sample data]' }) }]
-              },
-              timestamp: new Date().toISOString()
-            },
-            response: {
-              id: crypto.randomUUID(),
-              from: 'data-processor-agent-01',
-              task: {
-                id: crypto.randomUUID(),
-                status: { state: 'completed', message: 'Data processing completed' },
-                result: { status: 'completed', processedBy: 'data-processor-agent-01' }
-              }
-            }
-          }
-        case 'summarizer-summarizing':
-          return {
-            ...baseDetails,
-            endpoint: '/api/a2a/message',
-            request: {
-              id: crypto.randomUUID(),
-              from: 'gateway-agent-01',
-              message: {
-                role: 'user',
-                parts: [{ type: 'text', text: JSON.stringify({ type: 'summarize', data: 'processed data...' }) }]
-              },
-              timestamp: new Date().toISOString()
-            },
-            response: {
-              id: crypto.randomUUID(),
-              from: 'summarizer-agent-01',
-              task: {
-                id: crypto.randomUUID(),
-                status: { state: 'completed', message: 'Summarization completed' },
-                result: { status: 'completed', summary: 'データ処理結果の要約...' }
-              }
-            }
-          }
-        case 'web-search-searching':
-          return {
-            ...baseDetails,
-            endpoint: '/api/a2a/message',
-            request: {
-              id: crypto.randomUUID(),
-              from: 'gateway-agent-01',
-              message: {
-                role: 'user',
-                parts: [{ type: 'text', text: JSON.stringify({ type: taskType, query: 'sample search query' }) }]
-              },
-              timestamp: new Date().toISOString()
-            },
-            response: {
-              id: crypto.randomUUID(),
-              from: 'web-search-agent-01',
-              task: {
-                id: crypto.randomUUID(),
-                status: { state: 'completed', message: 'Search completed' },
-                result: { 
-                  status: 'completed', 
-                  result: {
-                    query: 'sample search query',
-                    results: [{ title: 'Sample Result', url: 'https://example.com', snippet: 'Sample content...' }],
-                    summary: 'Web検索結果の要約...'
-                  }
-                }
-              }
-            }
-          }
-        default:
-          return baseDetails
-      }
-    }
-
-    // Simulate step progression
-    const progressSteps = () => {
-      let stepIndex = 0
+    // 実際のworkflowExecutionIdが提供されている場合のみ処理
+    if (workflowExecutionId) {
+      console.log('🔄 Fetching real workflow data')
       
-      const interval = setInterval(() => {
-        if (stepIndex < initialSteps.length) {
-          setSteps(prev => prev.map((step, i) => {
-            if (i === stepIndex) {
-              const updatedStep = { ...step, status: 'active' as const }
-              onStepUpdate?.(updatedStep)
-              return updatedStep
+      const loadWorkflowData = async () => {
+        try {
+          const workflowData = await fetchWorkflowData(workflowExecutionId)
+          if (workflowData && workflowData.steps.length > 0) {
+            console.log('✅ Converting real workflow steps to A2A steps')
+            // 実際のワークフローステップを使用
+            const realSteps = workflowData.steps.map(convertWorkflowStepToA2AStep)
+            console.log('📋 Real steps converted:', realSteps)
+            setSteps(realSteps)
+            
+            // ワークフローが完了していない場合は、定期的に更新
+            if (workflowData.status === 'in_progress' || workflowData.status === 'pending') {
+              console.log('⏳ Workflow in progress, will poll for updates')
+              return true // ポーリング続行
+            } else {
+              console.log('✅ Workflow completed')
+              return false // ポーリング停止
             }
-            if (i < stepIndex) {
-              return { ...step, status: 'completed' as const }
-            }
-            return step
-          }))
-
-          // Complete current step after a delay
-          setTimeout(() => {
-            setSteps(prev => prev.map((step, i) => {
-              if (i === stepIndex) {
-                const details = generateStepDetails(initialSteps[i], taskType)
-                return { 
-                  ...step, 
-                  status: 'completed' as const,
-                  details
-                }
-              }
-              return step
-            }))
-          }, Math.random() * 2000 + 1000) // 1-3 seconds
-
-          stepIndex++
-        } else {
-          clearInterval(interval)
+          } else {
+            console.log('⚠️ No workflow data or steps found')
+            setSteps([])
+            return false
+          }
+        } catch (error) {
+          console.log('❌ Error fetching workflow data:', error)
+          setSteps([])
+          return false
         }
-      }, Math.random() * 1500 + 1500) // 1.5-3 seconds between steps
+      }
 
-      return interval
+      // 初回データ取得
+      loadWorkflowData().then((shouldContinuePolling) => {
+        if (shouldContinuePolling) {
+          // ワークフローが完了していない場合、2秒ごとにポーリング
+          const pollInterval = setInterval(async () => {
+            const continuePolling = await loadWorkflowData()
+            if (!continuePolling) {
+              clearInterval(pollInterval)
+            }
+          }, 2000)
+
+          // クリーンアップ用に返す
+          return () => clearInterval(pollInterval)
+        }
+      })
+
+    } else if (isActive && taskType) {
+      console.log('📝 Showing loading state while waiting for workflowExecutionId')
+      // workflowExecutionIdがまだない場合は、ローディング中を示すプレースホルダー
+      setSteps([{
+        id: 'loading',
+        agent: 'gateway',
+        action: 'routing',
+        status: 'active',
+        message: 'A2A通信を開始しています...',
+        timestamp: Date.now()
+      }])
+    } else {
+      console.log('📝 No active task')
+      setSteps([])
     }
 
-    const interval = progressSteps()
-    return () => clearInterval(interval)
-  }, [isActive, taskType, onStepUpdate])
+  }, [isActive, taskType, workflowExecutionId, onStepUpdate])
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -398,21 +314,37 @@ export function A2AVisualization({ isActive, taskType, onStepUpdate }: A2AVisual
           </div>
         ))}
         
-        {isActive && taskType && (
+        {(isActive || realWorkflowData) && taskType && (
           <div className="mt-4 space-y-3">
-            <div className="p-3 bg-blue-50 rounded-md">
-              <div className="flex items-center gap-2 text-sm text-blue-700">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span className="font-medium">
-                  {taskType === 'process' && 'データ処理中...'}
-                  {taskType === 'summarize' && '要約作成中...'}
-                  {taskType === 'analyze' && '分析ワークフロー実行中...'}
-                  {taskType === 'web-search' && 'Web検索実行中...'}
-                  {taskType === 'news-search' && 'ニュース検索実行中...'}
-                  {taskType === 'scholarly-search' && '学術検索実行中...'}
-                </span>
+            {!realWorkflowData || realWorkflowData.status === 'in_progress' || realWorkflowData.status === 'pending' ? (
+              <div className="p-3 bg-blue-50 rounded-md">
+                <div className="flex items-center gap-2 text-sm text-blue-700">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span className="font-medium">
+                    {taskType === 'process' && 'データ処理中...'}
+                    {taskType === 'summarize' && '要約作成中...'}
+                    {taskType === 'analyze' && '分析ワークフロー実行中...'}
+                    {taskType === 'web-search' && 'Web検索実行中...'}
+                    {taskType === 'news-search' && 'ニュース検索実行中...'}
+                    {taskType === 'scholarly-search' && '学術検索実行中...'}
+                  </span>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="p-3 bg-green-50 rounded-md">
+                <div className="flex items-center gap-2 text-sm text-green-700">
+                  <CheckCircle2 className="h-4 w-4" />
+                  <span className="font-medium">
+                    {taskType === 'process' && 'データ処理完了'}
+                    {taskType === 'summarize' && '要約作成完了'}
+                    {taskType === 'analyze' && '分析ワークフロー完了'}
+                    {taskType === 'web-search' && 'Web検索完了'}
+                    {taskType === 'news-search' && 'ニュース検索完了'}
+                    {taskType === 'scholarly-search' && '学術検索完了'}
+                  </span>
+                </div>
+              </div>
+            )}
             
             <div className="p-3 bg-gray-50 rounded-md">
               <div className="text-xs text-gray-600 space-y-1">
@@ -420,6 +352,12 @@ export function A2AVisualization({ isActive, taskType, onStepUpdate }: A2AVisual
                 <div>• 完了したステップ（緑色）をクリック</div>
                 <div>• リクエスト・レスポンスの詳細を確認</div>
                 <div>• A2Aプロトコルの通信内容を体験</div>
+                {realWorkflowData && (
+                  <div className="text-purple-600 font-medium">• 実際の実行履歴データを表示中</div>
+                )}
+                {!realWorkflowData && workflowExecutionId && (
+                  <div className="text-orange-600">• ワークフローデータの取得を試行中</div>
+                )}
               </div>
             </div>
           </div>
@@ -514,6 +452,39 @@ export function A2AVisualization({ isActive, taskType, onStepUpdate }: A2AVisual
                   </div>
                 </div>
                 
+                {/* Real Workflow Info */}
+                {realWorkflowData && (
+                  <div>
+                    <h4 className="text-sm font-semibold text-gray-700 mb-2">🔄 実際のワークフロー情報</h4>
+                    <div className="bg-purple-50 p-4 rounded-md text-xs space-y-2">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <span className="font-medium text-purple-700">ワークフローID:</span>
+                          <div className="text-purple-600">{realWorkflowData.id}</div>
+                        </div>
+                        <div>
+                          <span className="font-medium text-purple-700">実行タイプ:</span>
+                          <div className="text-purple-600">{realWorkflowData.type}</div>
+                        </div>
+                        <div>
+                          <span className="font-medium text-purple-700">開始時刻:</span>
+                          <div className="text-purple-600">{new Date(realWorkflowData.metadata.startedAt).toLocaleString()}</div>
+                        </div>
+                        <div>
+                          <span className="font-medium text-purple-700">実行時間:</span>
+                          <div className="text-purple-600">{realWorkflowData.metadata.totalDuration ? `${realWorkflowData.metadata.totalDuration}ms` : '実行中'}</div>
+                        </div>
+                      </div>
+                      {realWorkflowData.langfuseTraceId && (
+                        <div>
+                          <span className="font-medium text-purple-700">Langfuse Trace ID:</span>
+                          <div className="text-purple-600 font-mono text-xs">{realWorkflowData.langfuseTraceId}</div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {/* A2A Protocol Info */}
                 <div>
                   <h4 className="text-sm font-semibold text-gray-700 mb-2">🔗 A2Aプロトコル詳細</h4>
@@ -522,6 +493,7 @@ export function A2AVisualization({ isActive, taskType, onStepUpdate }: A2AVisual
                     <div>• 非同期タスク処理とステータス追跡</div>
                     <div>• エージェント間の直接通信</div>
                     <div>• 標準化されたメッセージフォーマット</div>
+                    {realWorkflowData && <div>• このデータは実際の実行履歴から取得されました</div>}
                   </div>
                 </div>
               </div>

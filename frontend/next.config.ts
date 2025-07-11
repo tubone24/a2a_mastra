@@ -10,6 +10,10 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  // プロキシのタイムアウトを延長
+  experimental: {
+    proxyTimeout: 120000, // 120秒
+  },
 };
 
 export default nextConfig;

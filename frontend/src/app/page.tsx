@@ -44,6 +44,8 @@ interface ApiResponse {
   metadata: {
     completedAt: string
     gateway: string
+    traceId?: string
+    workflowExecutionId?: string
   }
 }
 
@@ -85,13 +87,20 @@ export default function HomePage() {
         audienceType?: string
       }
 
+      // タイムアウト付きのfetchを実装
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 120000) // 120秒のタイムアウト
+
       const res = await fetch('/api/request', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(requestBody),
+        signal: controller.signal,
       })
+
+      clearTimeout(timeoutId)
 
       if (!res.ok) {
         const errorData = await res.json()
@@ -101,7 +110,11 @@ export default function HomePage() {
       const data = await res.json()
       setResponse(data)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'エラーが発生しました')
+      if (err instanceof Error && err.name === 'AbortError') {
+        setError('リクエストがタイムアウトしました。処理に時間がかかっています。')
+      } else {
+        setError(err instanceof Error ? err.message : 'エラーが発生しました')
+      }
     } finally {
       setLoading(false)
     }
@@ -492,8 +505,9 @@ export default function HomePage() {
 
               <div className="lg:col-span-1">
                 <A2AVisualization
-                  isActive={loading}
-                  taskType={loading ? form.getValues('type') : null}
+                  isActive={loading || Boolean(response)}
+                  taskType={loading ? form.getValues('type') : (response ? response.type as 'process' | 'summarize' | 'analyze' | 'web-search' | 'news-search' | 'scholarly-search' : null)}
+                  workflowExecutionId={response?.metadata?.workflowExecutionId}
                 />
               </div>
             </div>
