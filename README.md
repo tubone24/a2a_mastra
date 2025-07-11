@@ -1,274 +1,367 @@
-# Mastra A2A Demo
+# A2A Mastra Demo - Multi-Agent System with Amazon Bedrock
 
-MastraのAgent-to-Agent (A2A)プロトコルを活用したデモアプリケーションです。Amazon BedrockのClaude Sonnetを使用して、複数のエージェントが協調してタスクを処理します。
+A demonstration of Agent-to-Agent (A2A) communication protocol using the Mastra framework, featuring multiple specialized AI agents powered by Amazon Bedrock. This project showcases how autonomous agents can communicate, collaborate, and delegate tasks to achieve complex goals.
 
-## 概要
+## 🏗️ Architecture Overview
 
-このプロジェクトは3つのエージェントから構成されています：
+The system consists of four specialized agents that communicate via the A2A protocol:
 
-1. **Gateway Agent** - リクエストを受け取り、適切なエージェントにルーティングする
-2. **Data Processor Agent** - データの処理と分析を行う
-3. **Summarizer Agent** - 処理されたデータの要約を作成する
+1. **Gateway Agent** - Request router and workflow orchestrator
+2. **Data Processor Agent** - Data analysis and transformation
+3. **Summarizer Agent** - Content summarization and insight extraction
+4. **Web Search Agent** - Real-time web information retrieval
 
-各エージェントはDockerコンテナとして実行され、A2Aプロトコルを使用して相互に通信します。
+### System Architecture
 
-## アーキテクチャ
-
+```mermaid
+graph TB
+    subgraph "Frontend Layer"
+        UI[Next.js Frontend<br/>Port: 3000]
+    end
+    
+    subgraph "Agent Layer"
+        GW[Gateway Agent<br/>Port: 3001]
+        DP[Data Processor<br/>Port: 3002]
+        SM[Summarizer<br/>Port: 3003]
+        WS[Web Search<br/>Port: 3004]
+    end
+    
+    subgraph "External Services"
+        BEDROCK[Amazon Bedrock<br/>Claude 3.5 Sonnet]
+        LANGFUSE[Langfuse<br/>Tracing]
+        BRAVE[Brave Search API]
+    end
+    
+    UI -->|HTTP/REST| GW
+    GW -->|A2A Protocol| DP
+    GW -->|A2A Protocol| SM
+    GW -->|A2A Protocol| WS
+    
+    DP --> BEDROCK
+    SM --> BEDROCK
+    WS --> BEDROCK
+    WS --> BRAVE
+    
+    GW -.->|Traces| LANGFUSE
+    DP -.->|Traces| LANGFUSE
+    SM -.->|Traces| LANGFUSE
+    WS -.->|Traces| LANGFUSE
+    
+    style UI fill:#e1f5fe
+    style GW fill:#fff3e0
+    style DP fill:#f3e5f5
+    style SM fill:#e8f5e9
+    style WS fill:#fce4ec
 ```
-[Web UI (Next.js)] (Port 3000)
-     ↓
-[Gateway Agent] (Port 3001)
-     ↓ (A2A Protocol)
-[Data Processor Agent] (Port 3002) ← → [Summarizer Agent] (Port 3003)
-     ↓
-[Response to User Interface]
+
+## 🚀 Features
+
+- **Agent-to-Agent Communication**: Standardized A2A protocol for inter-agent messaging
+- **Workflow Orchestration**: Complex multi-step workflows with automatic task delegation
+- **Real-time Visualization**: Live visualization of agent communication flows
+- **Tracing & Observability**: Comprehensive tracing with Langfuse integration
+- **MCP Integration**: Model Context Protocol support for web search capabilities
+- **Japanese Language Support**: All agents respond in Japanese
+
+## 📋 Prerequisites
+
+- Docker and Docker Compose
+- Node.js 18+ (for local development)
+- AWS Account with Bedrock access
+- Langfuse account (optional, for tracing)
+- Brave Search API key (optional, for web search)
+
+## 🛠️ Installation
+
+1. Clone the repository:
+```bash
+git clone https://github.com/your-repo/a2a-mastra-demo.git
+cd a2a-mastra-demo
 ```
 
-## 必要な環境
-
-- Docker & Docker Compose
-- AWS アカウント (Amazon Bedrock アクセス)
-- Node.js 22+ (開発時)
-
-## セットアップ
-
-### 1. 環境変数の設定
-
-`.env.example`をコピーして`.env`ファイルを作成し、AWSクレデンシャルを設定してください：
-
+2. Copy the environment variables:
 ```bash
 cp .env.example .env
 ```
 
-`.env`ファイルを編集：
-
+3. Configure your `.env` file:
 ```env
 # AWS Credentials for Amazon Bedrock
-AWS_ACCESS_KEY_ID=your-actual-access-key-id
-AWS_SECRET_ACCESS_KEY=your-actual-secret-access-key
+AWS_ACCESS_KEY_ID=your-access-key-id
+AWS_SECRET_ACCESS_KEY=your-secret-access-key
 AWS_REGION=us-east-1
 
-# Application Ports
-FRONTEND_PORT=3000
-GATEWAY_PORT=3001
-DATA_PROCESSOR_PORT=3002
-SUMMARIZER_PORT=3003
-
-# Bedrock Model Configuration
+# Bedrock Model
 BEDROCK_MODEL_ID=anthropic.claude-3-5-sonnet-20240620-v1:0
 
-# Langfuse Observability (SaaS版 - https://cloud.langfuse.com で取得)
-LANGFUSE_PUBLIC_KEY=pk-your-public-key-from-langfuse-dashboard
-LANGFUSE_SECRET_KEY=sk-your-secret-key-from-langfuse-dashboard
+# Langfuse (optional)
+LANGFUSE_PUBLIC_KEY=your-public-key
+LANGFUSE_SECRET_KEY=your-secret-key
+LANGFUSE_BASEURL=https://cloud.langfuse.com
+
+# Brave Search (optional)
+BRAVE_SEARCH_API_KEY=your-api-key
 ```
 
-### 2. Langfuseの設定（オプション）
-
-AIエージェントの動作をトレースするためにLangfuseを設定できます：
-
-1. [Langfuse Cloud](https://cloud.langfuse.com)でアカウントを作成
-2. 新しいプロジェクトを作成
-3. Settings > API Keysから公開キーと秘密キーを取得
-4. `.env`ファイルに追加：
-
-```env
-LANGFUSE_PUBLIC_KEY=pk-lf-xxx...  # Langfuseダッシュボードから取得
-LANGFUSE_SECRET_KEY=sk-lf-xxx...  # Langfuseダッシュボードから取得
-```
-
-### 3. アプリケーションの起動
-
+4. Build and start the services:
 ```bash
-# すべてのエージェントをビルド・起動
-npm run dev
-
-# または個別に
 docker-compose up --build
 ```
 
-## 使用方法
+## 🎯 Usage
 
-### Webインターフェースを使用（推奨）
+Once the system is running, access the frontend at `http://localhost:3000`.
 
-1. ブラウザで `http://localhost:3000` にアクセス
-2. 美しいWebインターフェースでA2Aエージェントと対話
-3. タスクタイプを選択：
-   - **データ処理**: データのクリーニングと処理
-   - **要約作成**: テキストの要約を生成
-   - **分析ワークフロー**: データ処理→要約の完全なワークフロー
-4. データを入力してリアルタイムで結果を確認
+### Available Operations
 
-### API経由での直接アクセス
+1. **Data Processing** (`/api/a2a/agents` - type: process)
+   - Analyzes and transforms data
+   - Extracts patterns and insights
 
-Gateway Agent（`http://localhost:3001`）にリクエストを送信することも可能です：
+2. **Summarization** (`/api/a2a/agents` - type: summarize)
+   - Creates concise summaries
+   - Supports different audience types (technical, executive, general)
 
-#### 1. データ処理
+3. **Analysis Workflow** (`/api/a2a/agents` - type: analyze)
+   - Combines data processing and summarization
+   - End-to-end data analysis pipeline
+
+4. **Web Search** (`/api/a2a/agents` - type: web-search)
+   - Real-time web information retrieval
+   - News and scholarly article search
+
+### API Example
 
 ```bash
-curl -X POST http://localhost:3001/api/request \
+# Analyze data with full workflow
+curl -X POST http://localhost:3001/api/a2a/agents \
   -H "Content-Type: application/json" \
   -d '{
-    "type": "process",
-    "data": {
-      "sales": [100, 150, 200, 175, 250],
-      "products": ["A", "B", "C", "D", "E"]
-    },
-    "context": {
-      "department": "sales",
-      "period": "Q1 2024"
+    "type": "analyze",
+    "data": "Your data here",
+    "options": {
+      "audienceType": "executive"
     }
   }'
 ```
 
-#### 2. 要約作成
+## 🔄 Communication Flows
 
-```bash
-curl -X POST http://localhost:3001/api/request \
-  -H "Content-Type: application/json" \
-  -d '{
-    "type": "summarize",
-    "data": "大量のテキストデータやレポートをここに配置...",
-    "context": {
-      "source": "quarterly_report",
-      "format": "executive"
-    },
-    "audienceType": "executive"
-  }'
+### A2A Protocol
+
+The system implements a standardized A2A protocol with three main endpoints:
+
+1. **Message Endpoint** (`/api/a2a/message`) - Synchronous message exchange
+2. **Task Endpoint** (`/api/a2a/task`) - Asynchronous task processing
+3. **Agent Discovery** (`/api/a2a/agent`) - Agent capability discovery
+
+### Workflow Sequence with Agent Discovery
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Gateway
+    participant DataProcessor
+    participant Summarizer
+    
+    Note over Gateway,Summarizer: Agent Discovery Phase
+    
+    Gateway->>DataProcessor: GET /api/a2a/agent
+    DataProcessor-->>Gateway: {agentId, name, capabilities,<br/>supportedTypes: ["process", "analyze"]}
+    
+    Gateway->>Summarizer: GET /api/a2a/agent
+    Summarizer-->>Gateway: {agentId, name, capabilities,<br/>supportedTypes: ["summarize", "executive-summary"]}
+    
+    Note over Client,Summarizer: Workflow Execution Phase
+    
+    Client->>Gateway: POST /api/a2a/agents<br/>{type: "analyze", data: {...}}
+    activate Gateway
+    
+    Gateway->>Gateway: Create Workflow Execution<br/>Generate traceId & workflowId
+    
+    Gateway->>DataProcessor: POST /api/a2a/message<br/>{<br/>  type: "process",<br/>  data: {...},<br/>  metadata: {<br/>    workflowId: "wf-123",<br/>    traceId: "trace-456",<br/>    step: 1<br/>  }<br/>}
+    activate DataProcessor
+    
+    DataProcessor->>DataProcessor: Process with Bedrock<br/>Track with Langfuse
+    DataProcessor-->>Gateway: {<br/>  status: "success",<br/>  data: {processed_data, insights},<br/>  metadata: {processingTime: 1200ms}<br/>}
+    deactivate DataProcessor
+    
+    Gateway->>Summarizer: POST /api/a2a/message<br/>{<br/>  type: "summarize",<br/>  data: processed_data,<br/>  options: {audienceType: "executive"},<br/>  metadata: {<br/>    workflowId: "wf-123",<br/>    traceId: "trace-456",<br/>    step: 2<br/>  }<br/>}
+    activate Summarizer
+    
+    Summarizer->>Summarizer: Generate with Bedrock<br/>Track with Langfuse
+    Summarizer-->>Gateway: {<br/>  status: "success",<br/>  data: {summary, keyPoints, recommendations},<br/>  metadata: {processingTime: 800ms}<br/>}
+    deactivate Summarizer
+    
+    Gateway->>Gateway: Complete Workflow<br/>Aggregate Results
+    Gateway-->>Client: {<br/>  workflowId: "wf-123",<br/>  status: "completed",<br/>  result: {processedData, summary},<br/>  totalDuration: 2000ms<br/>}
+    deactivate Gateway
 ```
 
-#### 3. 分析ワークフロー（処理 → 要約）
+### Web Search Flow with MCP Protocol Details
 
-```bash
-curl -X POST http://localhost:3001/api/request \
-  -H "Content-Type: application/json" \
-  -d '{
-    "type": "analyze",
-    "data": {
-      "customer_data": [
-        {"id": 1, "purchases": 5, "value": 500},
-        {"id": 2, "purchases": 3, "value": 300},
-        {"id": 3, "purchases": 8, "value": 800}
-      ]
-    },
-    "context": {
-      "analysis_type": "customer_behavior"
-    },
-    "audienceType": "executive"
-  }'
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Gateway
+    participant WebSearch
+    participant MCPServer
+    participant BraveAPI
+    
+    Note over Gateway,WebSearch: Agent Card Exchange
+    
+    Gateway->>WebSearch: GET /api/a2a/agent
+    WebSearch-->>Gateway: {<br/>  agentId: "web-search-agent-01",<br/>  name: "Web Search Agent",<br/>  capabilities: ["web-search", "news-search"],<br/>  mcpEnabled: true,<br/>  protocols: ["a2a/v1", "mcp/v1"]<br/>}
+    
+    Note over Client,BraveAPI: Search Request Flow
+    
+    Client->>Gateway: POST /api/a2a/agents<br/>{type: "web-search", query: "AI trends 2024"}
+    activate Gateway
+    
+    Gateway->>WebSearch: POST /api/a2a/message<br/>{<br/>  type: "search",<br/>  query: "AI trends 2024",<br/>  options: {limit: 10},<br/>  metadata: {requestId: "req-789"}<br/>}
+    activate WebSearch
+    
+    Note over WebSearch,MCPServer: MCP Communication
+    
+    WebSearch->>MCPServer: POST /mcp/execute<br/>{<br/>  tool: "brave_web_search",<br/>  arguments: {<br/>    query: "AI trends 2024",<br/>    count: 10<br/>  }<br/>}
+    activate MCPServer
+    
+    MCPServer->>BraveAPI: GET /web/search<br/>Headers: {<br/>  "X-Subscription-Token": "api-key",<br/>  "Accept": "application/json"<br/>}<br/>Query: q=AI+trends+2024&count=10
+    
+    BraveAPI-->>MCPServer: {<br/>  web: {<br/>    results: [<br/>      {title: "...", url: "...", snippet: "..."},<br/>      ...<br/>    ]<br/>  }<br/>}
+    
+    MCPServer->>MCPServer: Format Results<br/>Extract Relevant Data
+    
+    MCPServer-->>WebSearch: {<br/>  success: true,<br/>  results: [formatted_results],<br/>  metadata: {<br/>    source: "brave",<br/>    resultCount: 10<br/>  }<br/>}
+    deactivate MCPServer
+    
+    WebSearch->>WebSearch: Analyze with Bedrock<br/>{<br/>  task: "Summarize search results",<br/>  context: search_results<br/>}
+    
+    WebSearch-->>Gateway: {<br/>  status: "success",<br/>  data: {<br/>    searchResults: [...],<br/>    summary: "AI generated summary",<br/>    keyFindings: [...],<br/>    sources: [...]<br/>  },<br/>  metadata: {<br/>    totalResults: 10,<br/>    processingTime: 1500ms<br/>  }<br/>}
+    deactivate WebSearch
+    
+    Gateway-->>Client: {<br/>  requestId: "req-789",<br/>  status: "completed",<br/>  results: {searchData}<br/>}
+    deactivate Gateway
 ```
 
-### ヘルスチェック
+### Asynchronous Task Processing Flow
 
-各サービスの状態を確認：
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Gateway
+    participant Agent
+    
+    Note over Client,Agent: Asynchronous Task Submission
+    
+    Client->>Gateway: POST /api/a2a/task<br/>{<br/>  type: "long-running-analysis",<br/>  data: {large_dataset}<br/>}
+    activate Gateway
+    
+    Gateway->>Gateway: Generate taskId: "task-abc-123"
+    
+    Gateway->>Agent: POST /api/a2a/task<br/>{<br/>  taskId: "task-abc-123",<br/>  type: "analysis",<br/>  data: {large_dataset}<br/>}
+    activate Agent
+    
+    Agent-->>Gateway: {<br/>  taskId: "task-abc-123",<br/>  status: "accepted",<br/>  estimatedTime: "5 minutes"<br/>}
+    
+    Gateway-->>Client: {<br/>  taskId: "task-abc-123",<br/>  status: "working",<br/>  pollUrl: "/api/a2a/task/task-abc-123"<br/>}
+    deactivate Gateway
+    
+    Note over Client,Agent: Status Polling
+    
+    Client->>Gateway: GET /api/a2a/task/task-abc-123
+    Gateway->>Agent: GET /api/a2a/task/task-abc-123
+    Agent-->>Gateway: {status: "working", progress: 45}
+    Gateway-->>Client: {status: "working", progress: 45}
+    
+    Agent->>Agent: Complete Processing
+    deactivate Agent
+    
+    Client->>Gateway: GET /api/a2a/task/task-abc-123
+    Gateway->>Agent: GET /api/a2a/task/task-abc-123
+    Agent-->>Gateway: {<br/>  status: "completed",<br/>  result: {analysis_results}<br/>}
+    Gateway-->>Client: {<br/>  status: "completed",<br/>  result: {analysis_results}<br/>}
+```
+
+## 🔧 Development
+
+### Project Structure
+
+```
+a2a-mastra-demo/
+├── agents/                    # Agent services
+│   ├── gateway/              # Gateway agent
+│   ├── data-processor/       # Data processing agent
+│   ├── summarizer/           # Summarization agent
+│   └── web-search/          # Web search agent
+├── frontend/                 # Next.js frontend
+├── shared/                   # Shared types and utilities
+└── docker-compose.yml        # Docker composition
+```
+
+### Local Development
+
+Each agent can be run independently for development:
 
 ```bash
-# Frontend
-curl http://localhost:3000
-
 # Gateway Agent
-curl http://localhost:3001/health
-
-# Data Processor Agent
-curl http://localhost:3002/health
-
-# Summarizer Agent
-curl http://localhost:3003/health
-```
-
-## A2A通信の仕組み
-
-### エージェント間通信
-
-1. **Gateway Agent**がユーザーリクエストを受信
-2. **A2Aプロトコル**を使用して適切なエージェントにタスクを送信
-3. **Data Processor**がデータを処理
-4. **Summarizer**が結果を要約（分析ワークフローの場合）
-5. **Gateway**が最終結果をユーザーに返す
-
-### サポートされるタスクタイプ
-
-#### Data Processor Agent
-- `process` - データのクリーニングと処理
-- `analyze` - 深い分析とパターン識別
-
-#### Summarizer Agent
-- `summarize` - 包括的な要約
-- `executive-summary` - エグゼクティブサマリー
-- `brief` - 簡潔な要約
-
-#### 対象オーディエンス
-- `technical` - 技術者向け
-- `executive` - 経営陣向け
-- `general` - 一般向け
-
-## 開発
-
-### ローカル開発
-
-```bash
-# フロントエンドを開発モードで起動
-cd frontend
-npm run dev
-
-# 個別のエージェントを開発モードで起動
 cd agents/gateway
+npm install
 npm run dev
 
+# Data Processor
 cd agents/data-processor
+npm install
 npm run dev
 
-cd agents/summarizer
-npm run dev
+# Continue for other agents...
 ```
 
-### ログの確認
+## 🔍 Monitoring & Debugging
 
+### Langfuse Tracing
+
+All agent interactions are traced in Langfuse. Access your traces at:
+- EU: https://cloud.langfuse.com
+- US: https://us.cloud.langfuse.com
+
+### Docker Logs
+
+Monitor agent logs:
 ```bash
-# すべてのサービスのログを表示
+# All services
 docker-compose logs -f
 
-# 特定のサービスのログ
-docker-compose logs -f frontend
+# Specific agent
 docker-compose logs -f gateway
-docker-compose logs -f data-processor
-docker-compose logs -f summarizer
 ```
 
-### トラブルシューティング
+## 🚢 Deployment
 
-1. **AWSクレデンシャルエラー**
-   - `.env`ファイルのAWS設定を確認
-   - BedrockへのアクセスRが有効になっているか確認
+The system is containerized and can be deployed to any Docker-compatible platform:
 
-2. **エージェント間通信エラー**
-   - すべてのコンテナが起動しているか確認
-   - ネットワーク設定を確認（`docker-compose logs`）
+1. **AWS ECS/Fargate**
+2. **Google Cloud Run**
+3. **Azure Container Instances**
+4. **Kubernetes**
 
-3. **ポート競合**
-   - `.env`ファイルでポート番号を変更可能
+Ensure all environment variables are properly configured in your deployment environment.
 
-## 将来の拡張
+## 🤝 Contributing
 
-このデモアプリケーションは以下のように拡張可能です：
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
-1. **AWS ECSデプロイ**
-   - 各エージェントを個別のECSサービスとしてデプロイ
-   - Application Load Balancerを使用したルーティング
+## 📄 License
 
-2. **追加エージェント**
-   - 画像処理エージェント
-   - 外部API統合エージェント
-   - データベース操作エージェント
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-3. **監視・ログ**
-   - CloudWatchによるメトリクス収集
-   - Langfuseによる詳細なAIトレーシング（実装済み）
-   - 分散トレーシング
+## 🙏 Acknowledgments
 
-4. **セキュリティ**
-   - エージェント間のTLS通信
-   - IAMロールベースのアクセス制御
-
-## ライセンス
-
-MIT License
+- [Mastra](https://mastra.ai) - The agent orchestration framework
+- [Amazon Bedrock](https://aws.amazon.com/bedrock/) - AI/ML model hosting
+- [Langfuse](https://langfuse.com) - LLM tracing and observability
+- [MCP](https://modelcontextprotocol.io/) - Model Context Protocol
