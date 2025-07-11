@@ -55,9 +55,14 @@ console.log('Mastra initialized successfully with agent registered');
 
 // Task schema for data processing
 const processTaskSchema = z.object({
-  type: z.enum(['process', 'analyze']),
+  type: z.enum(['process', 'analyze', 'research-analysis']),
   data: z.any(),
   context: z.record(z.any()).optional(),
+  options: z.object({
+    analyzePatterns: z.boolean().optional(),
+    extractInsights: z.boolean().optional(),
+    depth: z.enum(['basic', 'comprehensive', 'expert']).optional(),
+  }).optional(),
 });
 
 // Task storage (in production, this would be a proper database)
@@ -125,6 +130,43 @@ async function processTask(task: any, taskId: string, parentTraceId?: string) {
         5. さらなる処理のための次のステップを提案する
         
         コンテキスト: ${validatedTask.context ? JSON.stringify(validatedTask.context) : '提供されていません'}
+        
+        回答は必ず日本語で行ってください。
+      `;
+      break;
+      
+    case 'research-analysis':
+      const depth = validatedTask.options?.depth || 'comprehensive';
+      const shouldAnalyzePatterns = validatedTask.options?.analyzePatterns !== false;
+      const shouldExtractInsights = validatedTask.options?.extractInsights !== false;
+      
+      prompt = `
+        以下は研究目的のデータセットです。詳細な研究分析を実行してください：
+        ${JSON.stringify(validatedTask.data, null, 2)}
+        
+        分析レベル: ${depth}
+        パターン分析: ${shouldAnalyzePatterns ? '実行する' : 'スキップ'}
+        洞察抽出: ${shouldExtractInsights ? '実行する' : 'スキップ'}
+        
+        以下を実行してください：
+        1. データソースと信頼性の評価
+        2. 構造化された分析フレームワークの適用
+        ${shouldAnalyzePatterns ? '3. 深いパターン分析と相関関係の特定' : ''}
+        ${shouldExtractInsights ? '4. 戦略的洞察と示唆の抽出' : ''}
+        5. 研究仮説や質問に対する証拠の評価
+        6. 制限事項と潜在的バイアスの特定
+        7. さらなる研究の方向性の提案
+        8. 実用的な含意と提案の提供
+        
+        コンテキスト: ${validatedTask.context ? JSON.stringify(validatedTask.context) : '提供されていません'}
+        
+        分析結果は以下の構造で返してください：
+        - データ概要
+        - 主要な発見事項
+        - パターンと傾向
+        - 洞察と含意
+        - 制限事項
+        - 提案事項
         
         回答は必ず日本語で行ってください。
       `;
@@ -384,7 +426,7 @@ app.get('/api/a2a/agent', (req, res) => {
     status: 'online',
     version: '1.0.0',
     supportedProtocols: ['A2A'],
-    supportedTaskTypes: ['process', 'analyze'],
+    supportedTaskTypes: ['process', 'analyze', 'research-analysis'],
     supportedMessageTypes: ['text/plain', 'application/json'],
   });
 });

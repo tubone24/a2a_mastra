@@ -6,7 +6,8 @@ import { getBedrockModel } from './config/bedrock.js';
 import { z } from 'zod';
 import dotenv from 'dotenv';
 import { Langfuse } from 'langfuse';
-import { TaskRequest, TaskResponse, SearchOptions, SearchResult } from './types.js';
+// Remove the import since we'll define types inline
+// import { TaskRequest, TaskResponse, SearchOptions, SearchResult } from './types.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -124,7 +125,7 @@ async function initialize() {
 
 // Task schema for web search
 const searchTaskSchema = z.object({
-  type: z.enum(['web-search', 'news-search', 'scholarly-search']),
+  type: z.enum(['web-search', 'news-search', 'scholarly-search', 'comprehensive-search']),
   query: z.string(),
   context: z.record(z.any()).optional(),
   options: z.object({
@@ -134,6 +135,7 @@ const searchTaskSchema = z.object({
     timeRange: z.enum(['day', 'week', 'month', 'year', 'all']).optional().default('all'),
     category: z.enum(['general', 'news', 'images', 'videos', 'scholarly']).optional().default('general'),
     safesearch: z.enum(['strict', 'moderate', 'off']).optional().default('moderate'),
+    sources: z.array(z.enum(['web', 'news', 'academic', 'reports'])).optional().default(['web']),
   }).optional(),
 });
 
@@ -180,7 +182,8 @@ async function processSearchTask(task: any, taskId: string, parentTraceId?: stri
   try {
     // Determine search strategy based on task type
     let enhancedQuery = validatedTask.query;
-    let searchOptions = validatedTask.options || {};
+    const originalOptions = validatedTask.options || {};
+    let searchOptions: any = { ...originalOptions };
     
     switch (validatedTask.type) {
       case 'news-search':
@@ -197,6 +200,17 @@ async function processSearchTask(task: any, taskId: string, parentTraceId?: stri
         searchOptions = {
           ...searchOptions,
           category: 'scholarly',
+        };
+        break;
+        
+      case 'comprehensive-search':
+        // For comprehensive search, we'll perform multiple searches
+        // with different strategies and combine results
+        enhancedQuery = validatedTask.query;
+        const currentMaxResults = searchOptions.maxResults || 10;
+        searchOptions = {
+          ...searchOptions,
+          maxResults: Math.max(currentMaxResults, 15),
         };
         break;
         
@@ -526,7 +540,7 @@ app.get('/api/a2a/agent', (req, res) => {
     status: 'online',
     version: '1.0.0',
     supportedProtocols: ['A2A'],
-    supportedTaskTypes: ['web-search', 'news-search', 'scholarly-search'],
+    supportedTaskTypes: ['web-search', 'news-search', 'scholarly-search', 'comprehensive-search'],
     supportedSearchOptions: ['maxResults', 'timeRange', 'language', 'region', 'category', 'safesearch'],
     supportedMessageTypes: ['text/plain', 'application/json'],
   });

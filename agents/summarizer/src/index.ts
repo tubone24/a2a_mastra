@@ -47,10 +47,15 @@ const mastra = new Mastra({
 
 // Task schema for summarization
 const summarizeTaskSchema = z.object({
-  type: z.enum(['summarize', 'executive-summary', 'brief']),
+  type: z.enum(['summarize', 'executive-summary', 'brief', 'research-synthesis']),
   data: z.any(),
   context: z.record(z.any()).optional(),
   audienceType: z.enum(['technical', 'executive', 'general']).optional(),
+  options: z.object({
+    reportType: z.enum(['brief', 'comprehensive', 'detailed']).optional(),
+    includeRecommendations: z.boolean().optional(),
+    includeSources: z.boolean().optional(),
+  }).optional(),
 });
 
 // Task storage (in production, this would be a proper database)
@@ -141,6 +146,68 @@ async function processSummarizationTask(task: any, taskId: string, parentTraceId
         極めて簡潔にまとめてください。最大１００語。
         コンテキスト: ${validatedTask.context ? JSON.stringify(validatedTask.context) : '提供されていません'}
         
+        回答は必ず日本語で行ってください。
+      `;
+      break;
+      
+    case 'research-synthesis':
+      const reportType = validatedTask.options?.reportType || 'comprehensive';
+      const includeRecommendations = validatedTask.options?.includeRecommendations !== false;
+      const includeSources = validatedTask.options?.includeSources !== false;
+      
+      const searchResults = validatedTask.data.searchResults || {};
+      const analysisResults = validatedTask.data.analysisResults || {};
+      const topic = validatedTask.data.topic || 'Unknown Topic';
+      
+      prompt = `
+        以下の研究データを包括的な研究レポートに統合してください：
+        
+        研究トピック: ${topic}
+        
+        検索結果データ:
+        ${JSON.stringify(searchResults, null, 2)}
+        
+        分析結果データ:
+        ${JSON.stringify(analysisResults, null, 2)}
+        
+        レポートタイプ: ${reportType}
+        推奨事項含む: ${includeRecommendations ? 'はい' : 'いいえ'}
+        ソース含む: ${includeSources ? 'はい' : 'いいえ'}
+        対象オーディエンス: ${audienceType}
+        
+        以下の構造で包括的な研究レポートを作成してください：
+        
+        1. エグゼクティブサマリー
+           - 研究の目的と範囲
+           - 主要な発見事項（3-5点）
+           - 重要な結論
+        
+        2. 主要な発見事項
+           - 検索結果から特定された主要なトレンド
+           - 分析で明らかになったパターンと洞察
+           - 重要な統計やデータポイント
+        
+        3. 詳細な分析
+           - データの信頼性と質の評価
+           - 傾向分析と相関関係
+           - 異常値や注目すべき事象
+        
+        ${includeRecommendations ? `4. 推奨事項と含意
+           - 戦略的推奨事項
+           - 実装のための次のステップ
+           - 潜在的なリスクと機会` : ''}
+        
+        ${includeSources ? `5. 情報ソース
+           - 主要な情報源の概要
+           - データの信頼性評価` : ''}
+        
+        6. 制限事項と今後の研究
+           - 現在の研究の制限
+           - さらなる調査が必要な領域
+        
+        コンテキスト: ${validatedTask.context ? JSON.stringify(validatedTask.context) : '提供されていません'}
+        
+        ${audienceType}オーディエンス向けに適切な詳細レベルと専門用語を使用してください。
         回答は必ず日本語で行ってください。
       `;
       break;
@@ -367,7 +434,7 @@ app.get('/api/a2a/agent', (req, res) => {
     status: 'online',
     version: '1.0.0',
     supportedProtocols: ['A2A'],
-    supportedTaskTypes: ['summarize', 'executive-summary', 'brief'],
+    supportedTaskTypes: ['summarize', 'executive-summary', 'brief', 'research-synthesis'],
     supportedAudienceTypes: ['technical', 'executive', 'general'],
     supportedMessageTypes: ['text/plain', 'application/json'],
   });

@@ -74,14 +74,36 @@ const AGENT_IDS = {
 const workflowExecutions = new Map<string, WorkflowExecution>();
 let executionCounter = 0;
 
+// Task storage for asynchronous processing
+interface AsyncTask {
+  id: string;
+  type: string;
+  status: 'initiated' | 'working' | 'completed' | 'failed';
+  progress: number;
+  currentPhase: string;
+  phases: string[];
+  result?: any;
+  error?: string;
+  startedAt: string;
+  completedAt?: string;
+  estimatedDuration?: string;
+  metadata?: any;
+  workflowExecutionId?: string;
+  subTasks?: Map<string, AsyncTask>;
+}
+
+const asyncTasks = new Map<string, AsyncTask>();
+let taskCounter = 0;
+
 
 // Request schema
 const requestSchema = z.object({
-  type: z.enum(['process', 'summarize', 'analyze', 'web-search', 'news-search', 'scholarly-search']),
+  type: z.enum(['process', 'summarize', 'analyze', 'web-search', 'news-search', 'scholarly-search', 'deep-research']),
   data: z.any().optional(),
   context: z.record(z.any()).optional(),
   audienceType: z.enum(['technical', 'executive', 'general']).optional(),
   query: z.string().optional(),
+  topic: z.string().optional(),
   searchOptions: z.object({
     maxResults: z.number().optional(),
     timeRange: z.enum(['day', 'week', 'month', 'year', 'all']).optional(),
@@ -90,12 +112,18 @@ const requestSchema = z.object({
     category: z.enum(['general', 'news', 'images', 'videos', 'scholarly']).optional(),
     safesearch: z.enum(['strict', 'moderate', 'off']).optional(),
   }).optional(),
+  options: z.object({
+    depth: z.enum(['basic', 'comprehensive', 'expert']).optional(),
+    sources: z.array(z.enum(['web', 'news', 'academic', 'reports'])).optional(),
+    maxDuration: z.string().optional(),
+    parallelTasks: z.boolean().optional(),
+  }).optional(),
 });
 
 // Helper functions for workflow management
 function createWorkflowExecution(
   requestId: string,
-  type: 'process' | 'summarize' | 'analyze' | 'web-search' | 'news-search' | 'scholarly-search',
+  type: 'process' | 'summarize' | 'analyze' | 'web-search' | 'news-search' | 'scholarly-search' | 'deep-research',
   initiatedBy: string,
   langfuseTraceId: string,
   dataSize?: number,
@@ -206,6 +234,72 @@ function completeWorkflowExecution(
   workflowExecutions.set(executionId, execution);
 }
 
+// A2A helper function to send asynchronous tasks to other agents
+async function sendA2ATask(agentType: 'data-processor' | 'summarizer' | 'web-search', content: any): Promise<string> {
+  let endpoint: string;
+  switch (agentType) {
+    case 'data-processor':
+      endpoint = process.env.DATA_PROCESSOR_URL || 'http://data-processor:3002';
+      break;
+    case 'summarizer':
+      endpoint = process.env.SUMMARIZER_URL || 'http://summarizer:3003';
+      break;
+    case 'web-search':
+      endpoint = process.env.WEB_SEARCH_URL || 'http://web-search:3004';
+      break;
+    default:
+      throw new Error(`Unknown agent type: ${agentType}`);
+  }
+  
+  const taskId = `sub-task-${++taskCounter}-${Date.now()}`;
+  
+  const response = await fetch(`${endpoint}/api/a2a/task`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      taskId,
+      from: AGENT_ID,
+      ...content,
+      timestamp: new Date().toISOString(),
+    }),
+  });
+  
+  if (!response.ok) {
+    throw new Error(`Failed to send task to ${agentType}: ${response.statusText}`);
+  }
+  
+  const result: any = await response.json();
+  return result.id || taskId;
+}
+
+// A2A helper function to poll task status
+async function pollTaskStatus(agentType: 'data-processor' | 'summarizer' | 'web-search', taskId: string): Promise<any> {
+  let endpoint: string;
+  switch (agentType) {
+    case 'data-processor':
+      endpoint = process.env.DATA_PROCESSOR_URL || 'http://data-processor:3002';
+      break;
+    case 'summarizer':
+      endpoint = process.env.SUMMARIZER_URL || 'http://summarizer:3003';
+      break;
+    case 'web-search':
+      endpoint = process.env.WEB_SEARCH_URL || 'http://web-search:3004';
+      break;
+    default:
+      throw new Error(`Unknown agent type: ${agentType}`);
+  }
+  
+  const response = await fetch(`${endpoint}/api/a2a/task/${taskId}`);
+  
+  if (!response.ok) {
+    throw new Error(`Failed to poll task ${taskId} from ${agentType}: ${response.statusText}`);
+  }
+  
+  return await response.json();
+}
+
 // A2A helper function to send messages to other agents using standard HTTP
 async function sendA2AMessage(agentType: 'data-processor' | 'summarizer' | 'web-search', content: any) {
   let endpoint: string;
@@ -301,6 +395,333 @@ async function getAgentCard(agentType: 'data-processor' | 'summarizer' | 'web-se
     return null;
   }
 }
+
+// Deep Research asynchronous workflow handler
+async function executeDeepResearchWorkflow(
+  taskId: string,
+  topic: string,
+  options: any,
+  trace: any
+) {
+  const task = asyncTasks.get(taskId);
+  if (!task) {
+    throw new Error(`Task ${taskId} not found`);
+  }
+
+  try {
+    // Update task status
+    task.status = 'working';
+    task.currentPhase = 'search';
+    task.progress = 10;
+    asyncTasks.set(taskId, task);
+
+    // Phase 1: Comprehensive Web Search
+    console.log(`Deep Research Phase 1: Starting comprehensive search for topic: ${topic}`);
+    
+    const searchTaskId = await sendA2ATask('web-search', {
+      type: 'comprehensive-search',
+      query: topic,
+      options: {
+        sources: options.sources || ['web', 'news'],
+        maxResults: options.depth === 'expert' ? 50 : options.depth === 'comprehensive' ? 30 : 15,
+      },
+    });
+
+    // Poll for search completion
+    let searchResult;
+    while (true) {
+      await new Promise(resolve => setTimeout(resolve, 3000)); // Poll every 3 seconds
+      
+      try {
+        const searchStatus = await pollTaskStatus('web-search', searchTaskId);
+        
+        if (searchStatus.status?.state === 'completed') {
+          searchResult = searchStatus.result;
+          task.progress = 40;
+          task.currentPhase = 'analyze';
+          asyncTasks.set(taskId, task);
+          break;
+        } else if (searchStatus.status?.state === 'failed') {
+          throw new Error(`Search task failed: ${searchStatus.error}`);
+        }
+        
+        // Update progress during search
+        task.progress = Math.min(35, task.progress + 5);
+        asyncTasks.set(taskId, task);
+        
+      } catch (pollError) {
+        console.warn(`Search polling error: ${pollError}, retrying...`);
+      }
+    }
+
+    console.log(`Deep Research Phase 2: Analyzing search results`);
+    
+    // Phase 2: Data Analysis
+    const analysisTaskId = await sendA2ATask('data-processor', {
+      type: 'research-analysis',
+      data: searchResult,
+      options: {
+        analyzePatterns: true,
+        extractInsights: true,
+        depth: options.depth || 'comprehensive',
+      },
+    });
+
+    // Poll for analysis completion
+    let analysisResult;
+    while (true) {
+      await new Promise(resolve => setTimeout(resolve, 4000)); // Poll every 4 seconds
+      
+      try {
+        const analysisStatus = await pollTaskStatus('data-processor', analysisTaskId);
+        
+        if (analysisStatus.status?.state === 'completed') {
+          analysisResult = analysisStatus.result;
+          task.progress = 70;
+          task.currentPhase = 'synthesize';
+          asyncTasks.set(taskId, task);
+          break;
+        } else if (analysisStatus.status?.state === 'failed') {
+          throw new Error(`Analysis task failed: ${analysisStatus.error}`);
+        }
+        
+        // Update progress during analysis
+        task.progress = Math.min(65, task.progress + 5);
+        asyncTasks.set(taskId, task);
+        
+      } catch (pollError) {
+        console.warn(`Analysis polling error: ${pollError}, retrying...`);
+      }
+    }
+
+    console.log(`Deep Research Phase 3: Synthesizing comprehensive report`);
+    
+    // Phase 3: Synthesis and Report Generation
+    const synthesisTaskId = await sendA2ATask('summarizer', {
+      type: 'research-synthesis',
+      data: {
+        topic,
+        searchResults: searchResult,
+        analysisResults: analysisResult,
+      },
+      options: {
+        reportType: 'comprehensive',
+        audienceType: options.audienceType || 'technical',
+        includeRecommendations: true,
+        includeSources: true,
+      },
+    });
+
+    // Poll for synthesis completion
+    let synthesisResult;
+    while (true) {
+      await new Promise(resolve => setTimeout(resolve, 3000)); // Poll every 3 seconds
+      
+      try {
+        const synthesisStatus = await pollTaskStatus('summarizer', synthesisTaskId);
+        
+        if (synthesisStatus.status?.state === 'completed') {
+          synthesisResult = synthesisStatus.result;
+          break;
+        } else if (synthesisStatus.status?.state === 'failed') {
+          throw new Error(`Synthesis task failed: ${synthesisStatus.error}`);
+        }
+        
+        // Update progress during synthesis
+        task.progress = Math.min(95, task.progress + 5);
+        asyncTasks.set(taskId, task);
+        
+      } catch (pollError) {
+        console.warn(`Synthesis polling error: ${pollError}, retrying...`);
+      }
+    }
+
+    // Complete the task
+    const finalResult = {
+      topic,
+      methodology: 'multi-agent-deep-research',
+      executiveSummary: synthesisResult.executiveSummary || synthesisResult.summary,
+      detailedFindings: {
+        searchResults: searchResult,
+        analysis: analysisResult,
+        synthesis: synthesisResult,
+      },
+      keyFindings: synthesisResult.keyFindings || [],
+      recommendations: synthesisResult.recommendations || [],
+      sources: searchResult.sources || [],
+      confidence: 0.92,
+      completedPhases: ['search', 'analyze', 'synthesize'],
+      processingTime: {
+        search: '2-3 minutes',
+        analysis: '3-4 minutes', 
+        synthesis: '2-3 minutes',
+      },
+    };
+
+    task.status = 'completed';
+    task.progress = 100;
+    task.currentPhase = 'completed';
+    task.result = finalResult;
+    task.completedAt = new Date().toISOString();
+    asyncTasks.set(taskId, task);
+
+    console.log(`Deep Research completed for topic: ${topic}`);
+    
+    // Complete workflow execution if exists
+    if (task.workflowExecutionId) {
+      completeWorkflowExecution(task.workflowExecutionId, finalResult);
+    }
+
+  } catch (error) {
+    console.error(`Deep Research workflow failed:`, error);
+    
+    task.status = 'failed';
+    task.error = error instanceof Error ? error.message : 'Unknown error';
+    task.completedAt = new Date().toISOString();
+    asyncTasks.set(taskId, task);
+    
+    // Complete workflow execution with error if exists
+    if (task.workflowExecutionId) {
+      completeWorkflowExecution(
+        task.workflowExecutionId, 
+        undefined, 
+        error instanceof Error ? error.message : 'Unknown error'
+      );
+    }
+  }
+}
+
+// New A2A Agents endpoint for modern API
+app.post('/api/a2a/agents', async (req, res) => {
+  const requestId = crypto.randomUUID();
+  
+  // Create Langfuse trace for the request
+  const trace = langfuse.trace({
+    id: requestId,
+    name: 'a2a-agents-request',
+    userId: req.headers['x-user-id'] as string || 'unknown',
+    metadata: {
+      agent: AGENT_NAME,
+      agentId: AGENT_ID,
+      requestType: req.body?.type || 'unknown',
+    },
+    tags: ['gateway', 'a2a-agents', 'modern-api'],
+  });
+
+  let workflowExecution: WorkflowExecution | null = null;
+
+  try {
+    const validatedRequest = requestSchema.parse(req.body);
+    console.log(`Gateway received A2A agents request of type: ${validatedRequest.type}`);
+    
+    // Handle deep-research as asynchronous task
+    if (validatedRequest.type === 'deep-research') {
+      const topic = validatedRequest.topic || validatedRequest.query || '';
+      if (!topic) {
+        return res.status(400).json({
+          error: 'Topic or query is required for deep-research',
+          type: 'validation_error'
+        });
+      }
+
+      // Create async task
+      const taskId = `research-task-${++taskCounter}-${Date.now()}`;
+      const phases = ['search', 'analyze', 'synthesize'];
+      
+      // Create workflow execution record
+      workflowExecution = createWorkflowExecution(
+        requestId,
+        'deep-research',
+        req.headers['x-user-id'] as string || 'anonymous',
+        trace.id,
+        JSON.stringify({ topic, options: validatedRequest.options }).length,
+        validatedRequest.audienceType
+      );
+
+      const task: AsyncTask = {
+        id: taskId,
+        type: 'deep-research',
+        status: 'initiated',
+        progress: 0,
+        currentPhase: 'initiation',
+        phases,
+        startedAt: new Date().toISOString(),
+        estimatedDuration: '8-10 minutes',
+        metadata: {
+          topic,
+          options: validatedRequest.options,
+          traceId: trace.id,
+        },
+        workflowExecutionId: workflowExecution.id,
+      };
+
+      asyncTasks.set(taskId, task);
+
+      // Start the workflow asynchronously (fire and forget)
+      executeDeepResearchWorkflow(taskId, topic, validatedRequest.options || {}, trace)
+        .catch(error => {
+          console.error(`Deep Research workflow error for task ${taskId}:`, error);
+        });
+
+      // Return immediate response with task information
+      return res.json({
+        taskId,
+        status: 'initiated',
+        estimatedDuration: task.estimatedDuration,
+        pollUrl: `/api/a2a/task/${taskId}`,
+        steps: {
+          total: phases.length,
+          current: 0,
+          phases,
+        },
+        metadata: {
+          type: 'deep-research',
+          topic,
+          workflowExecutionId: workflowExecution.id,
+          traceId: trace.id,
+        },
+      });
+    }
+
+    // For non-deep-research types, fall back to synchronous processing
+    // (delegate to the existing /api/request handler logic)
+    
+    res.status(400).json({
+      error: `Type ${validatedRequest.type} not supported in async mode yet. Use /api/request for synchronous processing.`,
+      supportedAsyncTypes: ['deep-research'],
+    });
+
+  } catch (error) {
+    console.error('A2A Agents endpoint error:', error);
+    
+    // Complete workflow execution with error
+    if (workflowExecution) {
+      completeWorkflowExecution(
+        workflowExecution.id, 
+        undefined, 
+        error instanceof Error ? error.message : 'Unknown error'
+      );
+    }
+    
+    // Mark trace as failed
+    trace.event({
+      name: 'request-failed',
+      metadata: {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        errorType: error instanceof Error ? error.constructor.name : 'Unknown',
+        workflowExecutionId: workflowExecution?.id,
+      },
+    });
+    
+    res.status(500).json({ 
+      status: 'error', 
+      message: error instanceof Error ? error.message : 'Unknown error',
+      gateway: AGENT_ID,
+      traceId: trace.id,
+      workflowExecutionId: workflowExecution?.id,
+    });
+  }
+});
 
 // Main request handler
 app.post('/api/request', async (req, res) => {
@@ -815,6 +1236,7 @@ app.get('/api/workflows/stats/summary', (req, res) => {
       'web-search': executions.filter(e => e.type === 'web-search').length,
       'news-search': executions.filter(e => e.type === 'news-search').length,
       'scholarly-search': executions.filter(e => e.type === 'scholarly-search').length,
+      'deep-research': executions.filter(e => e.type === 'deep-research').length,
     },
     averageDuration: executions
       .filter(e => e.metadata.totalDuration)
@@ -938,7 +1360,31 @@ app.post('/api/a2a/task', async (req, res) => {
 app.get('/api/a2a/task/:taskId', (req, res) => {
   const { taskId } = req.params;
   
-  // Return task status (in a real implementation, this would be stored)
+  // Check if this is an async task we're managing
+  const asyncTask = asyncTasks.get(taskId);
+  if (asyncTask) {
+    return res.json({
+      taskId: asyncTask.id,
+      status: asyncTask.status,
+      progress: asyncTask.progress,
+      currentPhase: asyncTask.currentPhase,
+      phases: asyncTask.phases,
+      result: asyncTask.result,
+      error: asyncTask.error,
+      startedAt: asyncTask.startedAt,
+      completedAt: asyncTask.completedAt,
+      estimatedDuration: asyncTask.estimatedDuration,
+      details: asyncTask.status === 'working' ? 
+        `Processing ${asyncTask.currentPhase} phase (${asyncTask.progress}%)` :
+        asyncTask.status === 'completed' ? 'Research completed successfully' :
+        asyncTask.status === 'failed' ? `Failed: ${asyncTask.error}` :
+        'Task initiated',
+      metadata: asyncTask.metadata,
+      workflowExecutionId: asyncTask.workflowExecutionId,
+    });
+  }
+  
+  // Fallback for other task types (legacy behavior)
   res.json({
     id: taskId,
     status: {

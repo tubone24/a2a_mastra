@@ -60,8 +60,9 @@ interface A2AStep {
 
 interface A2AVisualizationProps {
   isActive: boolean
-  taskType: 'process' | 'summarize' | 'analyze' | 'web-search' | 'news-search' | 'scholarly-search' | null
+  taskType: 'process' | 'summarize' | 'analyze' | 'web-search' | 'news-search' | 'scholarly-search' | 'deep-research' | null
   workflowExecutionId?: string
+  taskId?: string
   onStepUpdate?: (step: A2AStep) => void
 }
 
@@ -327,6 +328,7 @@ export function A2AVisualization({ isActive, taskType, workflowExecutionId, onSt
                     {taskType === 'web-search' && 'Web検索実行中...'}
                     {taskType === 'news-search' && 'ニュース検索実行中...'}
                     {taskType === 'scholarly-search' && '学術検索実行中...'}
+                    {taskType === 'deep-research' && 'Deep Research実行中...'}
                   </span>
                 </div>
               </div>
@@ -341,6 +343,7 @@ export function A2AVisualization({ isActive, taskType, workflowExecutionId, onSt
                     {taskType === 'web-search' && 'Web検索完了'}
                     {taskType === 'news-search' && 'ニュース検索完了'}
                     {taskType === 'scholarly-search' && '学術検索完了'}
+                    {taskType === 'deep-research' && 'Deep Research完了'}
                   </span>
                 </div>
               </div>

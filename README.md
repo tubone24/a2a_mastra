@@ -130,7 +130,12 @@ Once the system is running, access the frontend at `http://localhost:3000`.
    - Real-time web information retrieval
    - News and scholarly article search
 
-### API Example
+5. **Deep Research** (`/api/a2a/agents` - type: deep-research)
+   - Multi-step research workflow using asynchronous task processing
+   - Combines web search, data processing, and summarization
+   - Long-running tasks with progress tracking and status polling
+
+### API Examples
 
 ```bash
 # Analyze data with full workflow
@@ -143,6 +148,36 @@ curl -X POST http://localhost:3001/api/a2a/agents \
       "audienceType": "executive"
     }
   }'
+
+# Deep Research (Asynchronous)
+curl -X POST http://localhost:3001/api/a2a/agents \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "deep-research",
+    "topic": "AI trends in healthcare 2024",
+    "options": {
+      "depth": "comprehensive",
+      "sources": ["web", "news", "academic"],
+      "audienceType": "technical",
+      "maxDuration": "10 minutes"
+    }
+  }'
+
+# Response for Deep Research
+{
+  "taskId": "research-task-abc-123",
+  "status": "initiated",
+  "estimatedDuration": "8-10 minutes",
+  "pollUrl": "/api/a2a/task/research-task-abc-123",
+  "steps": {
+    "total": 5,
+    "current": 1,
+    "phases": ["search", "analyze", "synthesize", "validate", "report"]
+  }
+}
+
+# Poll for status
+curl http://localhost:3001/api/a2a/task/research-task-abc-123
 ```
 
 ## 🔄 Communication Flows
@@ -241,6 +276,87 @@ sequenceDiagram
     deactivate WebSearch
     
     Gateway-->>Client: {<br/>  requestId: "req-789",<br/>  status: "completed",<br/>  results: {searchData}<br/>}
+    deactivate Gateway
+```
+
+### Deep Research Multi-Agent Workflow (Asynchronous)
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Gateway
+    participant WebSearch
+    participant DataProcessor
+    participant Summarizer
+    
+    Note over Client,Summarizer: Phase 1: Research Initiation
+    
+    Client->>Gateway: POST /api/a2a/agents<br/>{<br/>  type: "deep-research",<br/>  topic: "AI in healthcare 2024",<br/>  options: {depth: "comprehensive"}<br/>}
+    activate Gateway
+    
+    Gateway->>Gateway: Generate Research Plan<br/>taskId: "research-abc-123"<br/>phases: [search, analyze, synthesize]
+    
+    Gateway-->>Client: {<br/>  taskId: "research-abc-123",<br/>  status: "initiated",<br/>  phases: ["search", "analyze", "synthesize"],<br/>  pollUrl: "/api/a2a/task/research-abc-123"<br/>}
+    
+    Note over Gateway,Summarizer: Phase 2: Initial Web Search (Async)
+    
+    Gateway->>WebSearch: POST /api/a2a/task<br/>{<br/>  taskId: "search-sub-task-1",<br/>  type: "comprehensive-search",<br/>  query: "AI healthcare trends 2024",<br/>  options: {sources: ["web", "news"]}<br/>}
+    activate WebSearch
+    
+    WebSearch-->>Gateway: {<br/>  taskId: "search-sub-task-1",<br/>  status: "accepted",<br/>  estimatedTime: "2-3 minutes"<br/>}
+    
+    Note over Client,WebSearch: Client Polling During Search Phase
+    
+    Client->>Gateway: GET /api/a2a/task/research-abc-123
+    Gateway->>WebSearch: GET /api/a2a/task/search-sub-task-1
+    WebSearch-->>Gateway: {status: "working", progress: 30, phase: "web-search"}
+    Gateway-->>Client: {<br/>  status: "working",<br/>  currentPhase: "search",<br/>  progress: 30,<br/>  details: "Searching web sources..."<br/>}
+    
+    WebSearch->>WebSearch: Execute Multiple Searches<br/>- General AI healthcare<br/>- Recent developments<br/>- Market analysis
+    
+    WebSearch-->>Gateway: {<br/>  taskId: "search-sub-task-1",<br/>  status: "completed",<br/>  result: {<br/>    sources: 50,<br/>    articles: [...],<br/>    keyThemes: [...]<br/>  }<br/>}
+    deactivate WebSearch
+    
+    Note over Gateway,Summarizer: Phase 3: Data Analysis (Async)
+    
+    Gateway->>DataProcessor: POST /api/a2a/task<br/>{<br/>  taskId: "analyze-sub-task-2",<br/>  type: "research-analysis",<br/>  data: {searchResults},<br/>  options: {analyzePatterns: true}<br/>}
+    activate DataProcessor
+    
+    DataProcessor-->>Gateway: {<br/>  taskId: "analyze-sub-task-2",<br/>  status: "accepted",<br/>  estimatedTime: "3-4 minutes"<br/>}
+    
+    Client->>Gateway: GET /api/a2a/task/research-abc-123
+    Gateway->>DataProcessor: GET /api/a2a/task/analyze-sub-task-2
+    DataProcessor-->>Gateway: {status: "working", progress: 60, phase: "analysis"}
+    Gateway-->>Client: {<br/>  status: "working",<br/>  currentPhase: "analyze",<br/>  progress: 60,<br/>  details: "Analyzing patterns and trends..."<br/>}
+    
+    DataProcessor->>DataProcessor: Deep Analysis<br/>- Pattern identification<br/>- Trend analysis<br/>- Data correlation<br/>- Statistical insights
+    
+    DataProcessor-->>Gateway: {<br/>  taskId: "analyze-sub-task-2",<br/>  status: "completed",<br/>  result: {<br/>    patterns: [...],<br/>    trends: [...],<br/>    insights: [...],<br/>    correlations: [...]<br/>  }<br/>}
+    deactivate DataProcessor
+    
+    Note over Gateway,Summarizer: Phase 4: Synthesis & Report Generation (Async)
+    
+    Gateway->>Summarizer: POST /api/a2a/task<br/>{<br/>  taskId: "synthesis-sub-task-3",<br/>  type: "research-synthesis",<br/>  data: {searchResults, analysisResults},<br/>  options: {<br/>    reportType: "comprehensive",<br/>    audienceType: "technical"<br/>  }<br/>}
+    activate Summarizer
+    
+    Summarizer-->>Gateway: {<br/>  taskId: "synthesis-sub-task-3",<br/>  status: "accepted",<br/>  estimatedTime: "2-3 minutes"<br/>}
+    
+    Client->>Gateway: GET /api/a2a/task/research-abc-123
+    Gateway->>Summarizer: GET /api/a2a/task/synthesis-sub-task-3
+    Summarizer-->>Gateway: {status: "working", progress: 85, phase: "synthesis"}
+    Gateway-->>Client: {<br/>  status: "working",<br/>  currentPhase: "synthesize",<br/>  progress: 85,<br/>  details: "Generating comprehensive report..."<br/>}
+    
+    Summarizer->>Summarizer: Generate Research Report<br/>- Executive summary<br/>- Key findings<br/>- Trend analysis<br/>- Recommendations<br/>- Source citations
+    
+    Summarizer-->>Gateway: {<br/>  taskId: "synthesis-sub-task-3",<br/>  status: "completed",<br/>  result: {<br/>    executiveSummary: "...",<br/>    keyFindings: [...],<br/>    recommendations: [...],<br/>    fullReport: "...",<br/>    sources: [...]<br/>  }<br/>}
+    deactivate Summarizer
+    
+    Gateway->>Gateway: Compile Final Results<br/>- Aggregate all findings<br/>- Create research timeline<br/>- Generate metadata
+    
+    Note over Client,Summarizer: Phase 5: Research Completion
+    
+    Client->>Gateway: GET /api/a2a/task/research-abc-123
+    Gateway-->>Client: {<br/>  taskId: "research-abc-123",<br/>  status: "completed",<br/>  totalDuration: "8 minutes 23 seconds",<br/>  result: {<br/>    executiveSummary: "...",<br/>    detailedFindings: {...},<br/>    sourcesAnalyzed: 50,<br/>    trendsIdentified: 12,<br/>    recommendations: [...],<br/>    confidence: 0.92,<br/>    methodology: "multi-agent-research"<br/>  },<br/>  metadata: {<br/>    phases: ["search", "analyze", "synthesize"],<br/>    agentsUsed: ["web-search", "data-processor", "summarizer"],<br/>    processingTime: {<br/>      search: "2m 15s",<br/>      analysis: "3m 42s",<br/>      synthesis: "2m 26s"<br/>    }<br/>  }<br/>}
     deactivate Gateway
 ```
 
