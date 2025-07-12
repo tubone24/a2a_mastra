@@ -1,0 +1,33 @@
+import { Mastra } from '@mastra/core';
+import { Agent } from '@mastra/core';
+import { initializeMCPClient } from '../utils/mcpClient.js';
+import { createWebSearchAgent } from './agents/webSearchAgent.js';
+
+let mcpTools: any = {};
+let webSearchAgent: Agent;
+let mastra: Mastra;
+
+// Initialize everything
+export async function initialize() {
+  try {
+    // Initialize MCP Client and get tools
+    mcpTools = await initializeMCPClient();
+    
+    console.log('Search tools loaded:', Object.keys(mcpTools));
+
+    // Create Web Search Agent with MCP tools
+    webSearchAgent = createWebSearchAgent(mcpTools);
+
+    // Initialize Mastra with agent
+    mastra = new Mastra({
+      agents: { webSearchAgent },
+    });
+
+    console.log('Mastra initialized successfully with web search agent and MCP tools');
+    
+    return { mastra, webSearchAgent, mcpTools };
+  } catch (error) {
+    console.error('Failed to initialize application:', error);
+    throw error;
+  }
+}
