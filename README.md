@@ -2,16 +2,27 @@
 
 A demonstration of Agent-to-Agent (A2A) communication protocol using the Mastra framework, featuring multiple specialized AI agents powered by Amazon Bedrock. This project showcases how autonomous agents can communicate, collaborate, and delegate tasks to achieve complex goals.
 
+**Current Implementation**: Built with a hybrid Express + Mastra architecture, with plans to migrate fully to Mastra's native Hono-based API server in the future.
+
 ![demo](./docs/images/demo.gif)
 
 ## 🏗️ Architecture Overview
 
 The system consists of four specialized agents that communicate via the A2A protocol:
 
-1. **Gateway Agent** - Request router and workflow orchestrator
+1. **Gateway Agent** - Request routing and workflow orchestration
 2. **Data Processor Agent** - Data analysis and transformation
 3. **Summarizer Agent** - Content summarization and insight extraction
 4. **Web Search Agent** - Real-time web information retrieval
+
+### Technology Stack
+- **Framework**: Hybrid Mastra (A2A communication) + Express (HTTP server)
+- **LLM**: Amazon Bedrock Claude 3.5 Sonnet
+- **Language**: TypeScript
+- **Frontend**: Next.js
+- **Containerization**: Docker & Docker Compose
+- **Observability**: Langfuse
+- **Web Search**: Brave Search API + MCP (Model Context Protocol)
 
 ### System Architecture
 
@@ -59,34 +70,38 @@ graph TB
 ## 🚀 Features
 
 - **Agent-to-Agent Communication**: Standardized A2A protocol for inter-agent messaging
+- **Hybrid Architecture**: Express HTTP server with Mastra agent orchestration
 - **Workflow Orchestration**: Complex multi-step workflows with automatic task delegation
 - **Real-time Visualization**: Live visualization of agent communication flows
 - **Tracing & Observability**: Comprehensive tracing with Langfuse integration
 - **MCP Integration**: Model Context Protocol support for web search capabilities
 - **Japanese Language Support**: All agents respond in Japanese
+- **Containerized Deployment**: Docker-based microservices architecture
 
 ## 📋 Prerequisites
 
 - Docker and Docker Compose
-- Node.js 18+ (for local development)
+- Node.js 22+ (for local development)
 - AWS Account with Bedrock access
 - Langfuse account (optional, for tracing)
 - Brave Search API key (optional, for web search)
 
 ## 🛠️ Installation
 
-1. Clone the repository:
+### 1. Clone the repository
+
 ```bash
 git clone https://github.com/tubone24/a2a_mastra.git
-cd a2a-mastra-demo
+cd a2a_mastra
 ```
 
-2. Copy the environment variables:
+### 2. Copy the environment variables
+
 ```bash
 cp .env.example .env
 ```
 
-3. Configure your `.env` file:
+### 3. Configure your `.env` file:
 ```env
 # AWS Credentials for Amazon Bedrock
 AWS_ACCESS_KEY_ID=your-access-key-id
@@ -105,7 +120,8 @@ LANGFUSE_BASEURL=https://cloud.langfuse.com
 BRAVE_SEARCH_API_KEY=your-api-key
 ```
 
-4. Build and start the services:
+### 4. Build and start the services
+
 ```bash
 docker-compose up --build
 ```
@@ -407,15 +423,28 @@ sequenceDiagram
 
 ```
 a2a-mastra-demo/
-├── agents/                    # Agent services
-│   ├── gateway/              # Gateway agent
+├── agents/                    # Agent services (Express + Mastra hybrid)
+│   ├── gateway/              # Gateway agent with workflow orchestration
+│   │   ├── src/
+│   │   │   ├── index.ts      # Express server with Mastra integration
+│   │   │   ├── mastra/       # Mastra agent definitions
+│   │   │   └── routes/       # Express API routes
+│   │   └── package.json      # Dependencies (express + @mastra/core)
 │   ├── data-processor/       # Data processing agent
 │   ├── summarizer/           # Summarization agent
-│   └── web-search/          # Web search agent
+│   └── web-search/          # Web search agent with MCP integration
 ├── frontend/                 # Next.js frontend
 ├── shared/                   # Shared types and utilities
+├── standalone-mcp-server/    # Standalone MCP server for web search
 └── docker-compose.yml        # Docker composition
 ```
+
+### Current Architecture
+
+Each agent service runs as a hybrid Express + Mastra application:
+- **Express Server**: Handles HTTP requests and API routing
+- **Mastra Instance**: Manages agent definitions, workflows, and A2A communication
+- **Docker Container**: Isolated service deployment
 
 ### Local Development
 
@@ -434,6 +463,13 @@ npm run dev
 
 # Continue for other agents...
 ```
+
+### Migration Notes
+
+The project is currently in a hybrid state and can be migrated to pure Mastra:
+- Express routes → Mastra `registerApiRoute`
+- Express server → Mastra's built-in Hono server
+- Manual HTTP handling → Mastra's native A2A protocol
 
 ## 🔍 Monitoring & Debugging
 
@@ -454,7 +490,7 @@ docker-compose logs -f
 docker-compose logs -f gateway
 ```
 
-## 🚢 Deployment
+## 🚢 Deployment(TBD)
 
 The system is containerized and can be deployed to any Docker-compatible platform:
 
@@ -464,14 +500,6 @@ The system is containerized and can be deployed to any Docker-compatible platfor
 4. **Kubernetes**
 
 Ensure all environment variables are properly configured in your deployment environment.
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
 
 ## 📄 License
 
