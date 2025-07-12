@@ -24,6 +24,52 @@ The system consists of four specialized agents that communicate via the A2A prot
 - **Observability**: Langfuse
 - **Web Search**: Brave Search API + MCP (Model Context Protocol)
 
+### Hybrid Architecture Overview
+
+```mermaid
+graph TB
+    subgraph "Agent Container"
+        subgraph "Express Layer"
+            EXPRESS[Express HTTP Server<br/>Port: 300x]
+            ROUTES[Express Routes<br/>/api/a2a/*<br/>/api/*]
+        end
+        
+        subgraph "Mastra Layer"
+            MASTRA[Mastra Instance]
+            AGENT[Agent Definition]
+            WORKFLOW[Workflows]
+            A2A[A2A Protocol Handler]
+        end
+        
+        EXPRESS --> ROUTES
+        ROUTES --> MASTRA
+        MASTRA --> AGENT
+        MASTRA --> WORKFLOW
+        MASTRA --> A2A
+    end
+    
+    subgraph "External Services"
+        BEDROCK[Amazon Bedrock<br/>Claude 3.5 Sonnet]
+        LANGFUSE[Langfuse<br/>Observability]
+        BRAVE[Brave Search API]
+        MCP[MCP Server<br/>Web Search Tools]
+    end
+    
+    AGENT --> BEDROCK
+    WORKFLOW --> LANGFUSE
+    A2A -.->|Future Migration| HONO[Mastra Native<br/>Hono Server]
+    
+    style EXPRESS fill:#e3f2fd
+    style MASTRA fill:#fff3e0
+    style AGENT fill:#f3e5f5
+    style HONO fill:#e8f5e8,stroke:#4caf50,stroke-dasharray: 5 5
+```
+
+Each agent service follows this hybrid pattern:
+- **Express Server**: Handles HTTP requests, CORS, middleware
+- **Mastra Instance**: Manages agent logic, workflows, and inter-agent communication
+- **Future State**: Migration to Mastra's native Hono-based server
+
 ### System Architecture
 
 ```mermaid
