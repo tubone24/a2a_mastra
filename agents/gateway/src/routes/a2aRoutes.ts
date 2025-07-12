@@ -1,7 +1,7 @@
 import express from 'express';
 import { gatewayAgent } from '../mastra/agents/gatewayAgent.js';
 import { asyncTasks } from '../mastra/workflows/asyncTaskManager.js';
-import { getAgentCard } from '../utils/a2aHelpers.js';
+import { getAgentCard } from '../utils/mastraA2AClient.js';
 
 const router = express.Router();
 

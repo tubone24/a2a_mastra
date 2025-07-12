@@ -8,7 +8,7 @@ import {
   completeWorkflowExecution,
   WorkflowExecution 
 } from '../mastra/workflows/workflowManager.js';
-import { sendA2AMessage } from '../utils/a2aHelpers.js';
+import { sendA2AMessage } from '../utils/mastraA2AClient.js';
 
 const router = express.Router();
 

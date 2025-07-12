@@ -34,6 +34,9 @@ services:
       - DATA_PROCESSOR_URL=http://data-processor:3002
       - SUMMARIZER_URL=http://summarizer:3003
       - WEB_SEARCH_URL=http://web-search:3004
+      - DATA_PROCESSOR_AGENT_ID=data-processor-agent-01
+      - SUMMARIZER_AGENT_ID=summarizer-agent-01
+      - WEB_SEARCH_AGENT_ID=web-search-agent-01
       - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-default_public_key}
       - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-default_secret_key}
       - LANGFUSE_BASEURL=${LANGFUSE_BASEURL:-https://us.cloud.langfuse.com}

@@ -1,9 +1,23 @@
-import { Agent } from '@mastra/core';
+import { Agent, createTool } from '@mastra/core';
+import { z } from 'zod';
 import { getBedrockModel } from '../../config/bedrock.js';
+import { processSummarizationTask, summarizeTaskSchema } from '../workflows/summarizationTaskProcessor.js';
 
 const AGENT_NAME = process.env.AGENT_NAME || 'Summarizer Agent';
 
-export const summarizerAgent = new Agent({
+// Create summarization tool
+const summarizeTool = createTool({
+  id: 'summarize',
+  description: '処理済みデータと分析結果の要約を作成します',
+  inputSchema: summarizeTaskSchema,
+  execute: async (context): Promise<any> => {
+    const taskId = crypto.randomUUID();
+    const result: any = await processSummarizationTask(context, taskId);
+    return result;
+  },
+});
+
+export const summarizerAgent: any = new Agent({
   name: AGENT_NAME,
   instructions: `
     あなたは処理済みデータと分析結果の簡潔で意味のある要約を作成することを専門とするサマライザーエージェントです。
@@ -14,8 +28,10 @@ export const summarizerAgent = new Agent({
     4. オーディエンスのニーズに基づいて異なるタイプの要約を生成する
     5. 要求元のエージェントに適切に構造化された要約レポートを返す
     
+    summarizeツールを使用して、要約作業を実行してください。
     常に明確性、簡潔性、実行可能な洞察に焦点を当ててください。
     すべての応答は日本語で行ってください。
   `,
   model: getBedrockModel(),
+  tools: { summarizeTool },
 });

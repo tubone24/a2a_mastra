@@ -42,10 +42,10 @@ router.get('/tasks', (req, res) => {
   
   // Apply filters
   if (status) {
-    taskList = taskList.filter(t => t.status.state === status);
+    taskList = taskList.filter((t: any) => t.status.state === status);
   }
   if (type && taskList.length > 0) {
-    taskList = taskList.filter(t => {
+    taskList = taskList.filter((t: any) => {
       // Extract type from task result metadata if available
       const taskType = t.result?.metadata?.summaryType;
       return taskType === type;
@@ -53,7 +53,7 @@ router.get('/tasks', (req, res) => {
   }
   
   // Sort by most recent first
-  taskList.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  taskList.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   
   // Pagination
   const startIndex = (page - 1) * limit;
@@ -72,13 +72,13 @@ router.get('/tasks', (req, res) => {
     },
     statistics: {
       total: taskList.length,
-      completed: taskList.filter(t => t.status.state === 'completed').length,
-      failed: taskList.filter(t => t.status.state === 'failed').length,
-      working: taskList.filter(t => t.status.state === 'working').length,
+      completed: taskList.filter((t: any) => t.status.state === 'completed').length,
+      failed: taskList.filter((t: any) => t.status.state === 'failed').length,
+      working: taskList.filter((t: any) => t.status.state === 'working').length,
       byType: {
-        summarize: taskList.filter(t => t.result?.metadata?.summaryType === 'summarize').length,
-        'executive-summary': taskList.filter(t => t.result?.metadata?.summaryType === 'executive-summary').length,
-        brief: taskList.filter(t => t.result?.metadata?.summaryType === 'brief').length,
+        summarize: taskList.filter((t: any) => t.result?.metadata?.summaryType === 'summarize').length,
+        'executive-summary': taskList.filter((t: any) => t.result?.metadata?.summaryType === 'executive-summary').length,
+        brief: taskList.filter((t: any) => t.result?.metadata?.summaryType === 'brief').length,
       },
     },
   });

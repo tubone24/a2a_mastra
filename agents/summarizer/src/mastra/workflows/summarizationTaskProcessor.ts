@@ -7,7 +7,7 @@ const AGENT_NAME = process.env.AGENT_NAME || 'Summarizer Agent';
 
 // Task schema for summarization
 export const summarizeTaskSchema = z.object({
-  type: z.enum(['summarize', 'executive-summary', 'brief', 'research-synthesis']),
+  type: z.enum(['summarize', 'executive-summary', 'brief', 'research-synthesis', 'comprehensive']),
   data: z.any(),
   context: z.record(z.any()).optional(),
   audienceType: z.enum(['technical', 'executive', 'general']).optional(),
@@ -26,7 +26,7 @@ const langfuse = new Langfuse({
 });
 
 // Helper function to process summarization tasks
-export async function processSummarizationTask(task: any, taskId: string, parentTraceId?: string) {
+export async function processSummarizationTask(task: any, taskId: string, parentTraceId?: string): Promise<any> {
   // Create Langfuse trace for this summarization task
   const trace = langfuse.trace({
     id: parentTraceId || undefined,
@@ -55,7 +55,7 @@ export async function processSummarizationTask(task: any, taskId: string, parent
   });
   
   let prompt = '';
-  let summaryResult;
+  let summaryResult: any;
   
   switch (validatedTask.type) {
     case 'summarize':
@@ -176,6 +176,50 @@ export async function processSummarizationTask(task: any, taskId: string, parent
       `;
       break;
       
+    case 'comprehensive':
+      prompt = `
+        以下のデータと分析の包括的で詳細な要約を作成してください：
+        ${JSON.stringify(validatedTask.data, null, 2)}
+        
+        以下の構造で非常に詳細な包括的レポートを作成してください：
+        
+        1. エグゼクティブサマリー
+           - プロジェクトの概要と目的
+           - 主要な発見事項（5-7点）
+           - 重要な結論と含意
+        
+        2. 詳細な分析結果
+           - データの品質と範囲の評価
+           - 特定されたパターンと傾向の詳細分析
+           - 統計的発見と数値データの解釈
+           - 異常値や注目すべき事象の詳細
+        
+        3. 深い洞察と含意
+           - データから導かれる戦略的洞察
+           - ビジネスや技術への潜在的影響
+           - 長期的な傾向と予測
+           - リスク要因と機会の詳細分析
+        
+        4. 実行可能な推奨事項
+           - 短期的な改善提案
+           - 中長期的な戦略的推奨事項
+           - 実装のためのロードマップ
+           - 成功指標と測定方法
+        
+        5. 制限事項と今後の研究
+           - 現在の分析の制限点
+           - データギャップの特定
+           - さらなる調査が必要な領域
+           - 推奨される追加データ収集
+        
+        対象オーディエンス: ${audienceType}
+        コンテキスト: ${validatedTask.context ? JSON.stringify(validatedTask.context) : '提供されていません'}
+        
+        ${audienceType}オーディエンスに適した専門性レベルで、非常に詳細で実用的な包括的レポートを作成してください。
+        回答は必ず日本語で行ってください。
+      `;
+      break;
+      
     default:
       throw new Error(`Unknown task type: ${validatedTask.type}`);
   }
@@ -195,7 +239,7 @@ export async function processSummarizationTask(task: any, taskId: string, parent
   });
   
   try {
-    const result = await summarizerAgent.generate([
+    const result: any = await summarizerAgent.generate([
       { role: "user", content: prompt }
     ]);
     console.log('Agent response received, length:', result.text.length);
@@ -232,6 +276,8 @@ export async function processSummarizationTask(task: any, taskId: string, parent
       },
     });
     
+    return summaryResult;
+    
   } catch (error) {
     generation.end({
       output: { error: error instanceof Error ? error.message : 'Unknown error' },
@@ -247,8 +293,6 @@ export async function processSummarizationTask(task: any, taskId: string, parent
     
     throw error;
   }
-  
-  return summaryResult;
 }
 
 export { langfuse };

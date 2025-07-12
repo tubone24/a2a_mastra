@@ -1,4 +1,5 @@
 import express from 'express';
+import { mastra } from '../mastra/index.js';
 import { processSummarizationTask } from '../mastra/workflows/summarizationTaskProcessor.js';
 
 const router = express.Router();
@@ -8,7 +9,7 @@ const AGENT_NAME = process.env.AGENT_NAME || 'Summarizer Agent';
 const PORT = process.env.PORT || 3003;
 
 // Task storage (in production, this would be a database)
-const tasks = new Map();
+export const tasks = new Map();
 
 // A2A Task endpoint for receiving tasks from other agents
 router.post('/task', async (req, res) => {
@@ -27,7 +28,7 @@ router.post('/task', async (req, res) => {
     
     // Process task asynchronously
     processSummarizationTask(req.body, taskId)
-      .then(result => {
+      .then((result: any) => {
         console.log(`${AGENT_NAME} completed summarization task`);
         // Store task result
         tasks.set(taskId, {
@@ -38,7 +39,7 @@ router.post('/task', async (req, res) => {
           completedAt: new Date().toISOString(),
         });
       })
-      .catch(error => {
+      .catch((error: any) => {
         console.error(`${AGENT_NAME} task processing error:`, error);
         tasks.set(taskId, {
           id: taskId,
@@ -78,8 +79,10 @@ router.post('/message', async (req, res) => {
     let taskData;
     try {
       taskData = JSON.parse(message.parts[0].text);
+      console.log(`Parsed taskData:`, JSON.stringify(taskData, null, 2));
     } catch {
       taskData = { type: 'summarize', data: message.parts[0].text };
+      console.log(`Fallback taskData:`, JSON.stringify(taskData, null, 2));
     }
     
     // Create a task for this message
@@ -88,7 +91,23 @@ router.post('/message', async (req, res) => {
     // Process the task asynchronously
     let result;
     try {
-      result = await processSummarizationTask(taskData, taskId);
+      // Always use our specialized summarization workflow for A2A messages
+      // Set default type if not provided
+      if (!taskData.type) {
+        taskData.type = 'summarize';
+      }
+      
+      const validTaskTypes = ['summarize', 'executive-summary', 'brief', 'research-synthesis', 'comprehensive'];
+      
+      if (validTaskTypes.includes(taskData.type)) {
+        result = await processSummarizationTask(taskData, taskId);
+      } else {
+        // For unknown types, convert to general summarization
+        result = await processSummarizationTask({
+          ...taskData,
+          type: 'summarize'
+        }, taskId);
+      }
     } catch (error) {
       result = {
         status: 'failed',
@@ -98,8 +117,8 @@ router.post('/message', async (req, res) => {
     }
     
     // Return A2A compliant response with task
-    const taskState = result.status === 'completed' ? 'completed' : 'failed';
-    const taskMessage = result.status === 'completed' ? 'Summarization completed successfully' : (result as any).error || 'Summarization failed';
+    const taskState = result?.status === 'completed' ? 'completed' : 'failed';
+    const taskMessage = result?.status === 'completed' ? 'Summarization completed successfully' : (result as any)?.error || 'Summarization failed';
     
     res.json({
       id: crypto.randomUUID(),
@@ -183,7 +202,13 @@ router.get('/agent', (req, res) => {
     supportedTaskTypes: ['summarize', 'executive-summary', 'brief', 'research-synthesis'],
     supportedAudienceTypes: ['technical', 'executive', 'general'],
     supportedMessageTypes: ['text/plain', 'application/json'],
+    // Enhanced with Mastra agent capabilities
+    mastraAgent: {
+      id: AGENT_ID,
+      available: true,
+      tools: mastra.getAgent(AGENT_ID)?.tools ? Object.keys(mastra.getAgent(AGENT_ID).tools) : [],
+    }
   });
 });
 
-export { router as a2aRoutes, tasks };
+export { router as a2aRoutes };

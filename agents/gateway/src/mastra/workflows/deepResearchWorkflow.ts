@@ -1,6 +1,6 @@
 import { asyncTasks, AsyncTask } from './asyncTaskManager.js';
 import { completeWorkflowExecution } from './workflowManager.js';
-import { sendA2ATask, pollTaskStatus } from '../../utils/a2aHelpers.js';
+import { sendA2AMessage, sendA2ATask, pollTaskStatus } from '../../utils/mastraA2AClient.js';
 
 export async function executeDeepResearchWorkflow(
   taskId: string,
@@ -101,8 +101,8 @@ export async function executeDeepResearchWorkflow(
 
     console.log(`Deep Research Phase 3: Synthesizing comprehensive report`);
     
-    // Phase 3: Synthesis and Report Generation
-    const synthesisTaskId = await sendA2ATask('summarizer', {
+    // Phase 3: Synthesis and Report Generation using A2A Message
+    const synthesisResult = await sendA2AMessage('summarizer', {
       type: 'research-synthesis',
       data: {
         topic,
@@ -117,29 +117,9 @@ export async function executeDeepResearchWorkflow(
       },
     });
 
-    // Poll for synthesis completion
-    let synthesisResult;
-    while (true) {
-      await new Promise(resolve => setTimeout(resolve, 3000)); // Poll every 3 seconds
-      
-      try {
-        const synthesisStatus = await pollTaskStatus('summarizer', synthesisTaskId);
-        
-        if (synthesisStatus.status?.state === 'completed') {
-          synthesisResult = synthesisStatus.result;
-          break;
-        } else if (synthesisStatus.status?.state === 'failed') {
-          throw new Error(`Synthesis task failed: ${synthesisStatus.error}`);
-        }
-        
-        // Update progress during synthesis
-        task.progress = Math.min(95, task.progress + 5);
-        asyncTasks.set(taskId, task);
-        
-      } catch (pollError) {
-        console.warn(`Synthesis polling error: ${pollError}, retrying...`);
-      }
-    }
+    // Update progress to 95%
+    task.progress = 95;
+    asyncTasks.set(taskId, task);
 
     // Complete the task
     const finalResult = {
