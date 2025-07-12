@@ -1,5 +1,8 @@
 import { WorkflowExecution, WorkflowStep } from '../../types.js';
 
+// Re-export types for other modules
+export type { WorkflowExecution, WorkflowStep };
+
 // Workflow execution storage (in production, this would be a database)
 export const workflowExecutions = new Map<string, WorkflowExecution>();
 let executionCounter = 0;
