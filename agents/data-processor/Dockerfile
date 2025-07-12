@@ -19,4 +19,4 @@ RUN npm run build
 EXPOSE 3000
 
 # Start the agent
-CMD ["npm", "start"]
+CMD ["npm", "run", "dev:mastra"]

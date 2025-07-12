@@ -6,10 +6,12 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "dev": "tsx watch src/index.ts"
+    "dev": "tsx watch src/index.ts",
+    "dev:mastra": "mastra dev"
   },
   "dependencies": {
     "@mastra/core": "latest",
+    "mastra": "latest",
     "@mastra/client-js": "latest",
     "@ai-sdk/amazon-bedrock": "^2.2.11",
     "ai": "^4.0.0",
