@@ -16,6 +16,16 @@ router.post('/task', async (req, res) => {
   try {
     console.log(`${AGENT_NAME} received A2A task:`, req.body);
     
+    const { to } = req.body;
+    
+    // Validate target agent ID if specified
+    if (to && to !== AGENT_ID) {
+      return res.status(400).json({
+        error: `Task intended for agent ${to}, but this is ${AGENT_ID}`,
+        from: AGENT_ID,
+      });
+    }
+    
     const taskId = req.body.id || crypto.randomUUID();
     
     // Store initial task state
@@ -73,7 +83,15 @@ router.post('/message', async (req, res) => {
   try {
     console.log(`${AGENT_NAME} received A2A message:`, req.body);
     
-    const { id, from, message, timestamp } = req.body;
+    const { id, from, message, timestamp, to } = req.body;
+    
+    // Validate target agent ID if specified
+    if (to && to !== AGENT_ID) {
+      return res.status(400).json({
+        error: `Message intended for agent ${to}, but this is ${AGENT_ID}`,
+        from: AGENT_ID,
+      });
+    }
     
     // Parse the task from the message content
     let taskData;

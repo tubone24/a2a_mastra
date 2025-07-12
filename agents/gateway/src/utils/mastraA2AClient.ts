@@ -46,13 +46,48 @@ function getAgentId(agentType: 'data-processor' | 'summarizer' | 'web-search'): 
   }
 }
 
-// A2A helper function to send messages to other agents using HTTP (compatible with existing endpoints)
+// A2A helper function to send messages to other agents using Mastra Client
 export async function sendA2AMessage(agentType: 'data-processor' | 'summarizer' | 'web-search', content: any) {
   const baseUrl = getAgentBaseUrl(agentType);
   const targetAgentId = getAgentId(agentType);
   
   try {
-    // Use direct HTTP to send message to existing A2A endpoints
+    const client = getAgentClient(targetAgentId, baseUrl);
+    const a2a = client.getA2A(targetAgentId);
+    
+    // Prepare message for agent using A2A protocol
+    const messageId = crypto.randomUUID();
+    const message = typeof content === 'string' ? content : JSON.stringify(content);
+    
+    // Send A2A message using standard A2A protocol
+    const response = await a2a.sendMessage({
+      id: messageId,
+      message: {
+        role: "user",
+        parts: [{
+          type: "text",
+          text: message
+        }]
+      }
+    });
+    
+    console.log(`A2A response from ${agentType}:`, JSON.stringify(response, null, 2));
+    
+    return response;
+  } catch (error) {
+    console.error(`Failed to send A2A message to ${agentType}:`, error);
+    
+    // Fallback to direct HTTP if Mastra client fails
+    console.log(`Falling back to HTTP for ${agentType}...`);
+    return await sendA2AMessageHTTP(agentType, content);
+  }
+}
+
+// Fallback HTTP implementation for compatibility
+async function sendA2AMessageHTTP(agentType: 'data-processor' | 'summarizer' | 'web-search', content: any) {
+  const baseUrl = getAgentBaseUrl(agentType);
+  
+  try {
     const messageId = crypto.randomUUID();
     
     const response = await fetch(`${baseUrl}/api/a2a/message`, {
@@ -79,7 +114,7 @@ export async function sendA2AMessage(agentType: 'data-processor' | 'summarizer' 
     }
     
     const result: any = await response.json();
-    console.log(`A2A response from ${agentType}:`, JSON.stringify(result, null, 2));
+    console.log(`A2A HTTP response from ${agentType}:`, JSON.stringify(result, null, 2));
     
     // Wait for task completion if it's in working state
     if (result.task?.status?.state === "working") {
@@ -105,7 +140,7 @@ export async function sendA2AMessage(agentType: 'data-processor' | 'summarizer' 
     console.log(`Returning immediate result for ${agentType}:`, JSON.stringify(result.task?.result || result, null, 2));
     return result.task?.result || result;
   } catch (error) {
-    console.error(`Failed to send A2A message to ${agentType}:`, error);
+    console.error(`Failed to send A2A HTTP message to ${agentType}:`, error);
     throw new Error(`Failed to send A2A message to ${agentType}: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
@@ -113,16 +148,28 @@ export async function sendA2AMessage(agentType: 'data-processor' | 'summarizer' 
 // A2A helper function to get agent card information
 export async function getAgentCard(agentType: 'data-processor' | 'summarizer' | 'web-search') {
   const baseUrl = getAgentBaseUrl(agentType);
+  const targetAgentId = getAgentId(agentType);
   
   try {
-    const response = await fetch(`${baseUrl}/api/a2a/agent`);
-    if (response.ok) {
-      return await response.json();
-    }
-    return null;
+    // Try to get agent card through A2A protocol first
+    const client = getAgentClient(targetAgentId, baseUrl);
+    const a2a = client.getA2A(targetAgentId);
+    
+    return await a2a.getCard();
   } catch (error) {
-    console.warn(`Failed to get agent card for ${agentType}:`, error);
-    return null;
+    console.warn(`Failed to get agent card via A2A for ${agentType}, falling back to HTTP:`, error);
+    
+    // Fallback to direct HTTP for agent card discovery
+    try {
+      const response = await fetch(`${baseUrl}/api/a2a/agent`);
+      if (response.ok) {
+        return await response.json();
+      }
+      return null;
+    } catch (httpError) {
+      console.warn(`Failed to get agent card for ${agentType}:`, httpError);
+      return null;
+    }
   }
 }
 
@@ -132,7 +179,40 @@ export async function sendA2ATask(agentType: 'data-processor' | 'summarizer' | '
   const targetAgentId = getAgentId(agentType);
   
   try {
-    // Use direct HTTP for task creation (legacy support)
+    const client = getAgentClient(targetAgentId, baseUrl);
+    const a2a = client.getA2A(targetAgentId);
+    
+    // Convert task content to message format and create task using A2A protocol
+    const message = typeof content === 'string' ? content : JSON.stringify(content);
+    const taskId = `task-${Date.now()}`;
+    
+    // Create task using A2A protocol
+    await a2a.sendMessage({
+      id: crypto.randomUUID(),
+      message: {
+        role: "user",
+        parts: [{
+          type: "text",
+          text: message
+        }]
+      }
+    });
+    
+    console.log(`A2A task created for ${agentType}:`, taskId);
+    return taskId;
+  } catch (error) {
+    console.error(`Failed to send A2A task to ${agentType}:`, error);
+    
+    // Fallback to HTTP implementation
+    return await sendA2ATaskHTTP(agentType, content);
+  }
+}
+
+// Fallback HTTP task implementation
+async function sendA2ATaskHTTP(agentType: 'data-processor' | 'summarizer' | 'web-search', content: any): Promise<string> {
+  const baseUrl = getAgentBaseUrl(agentType);
+  
+  try {
     const taskId = `task-${Date.now()}`;
     const response = await fetch(`${baseUrl}/api/a2a/task`, {
       method: 'POST',
@@ -154,7 +234,7 @@ export async function sendA2ATask(agentType: 'data-processor' | 'summarizer' | '
     const result: any = await response.json();
     return result.id || taskId;
   } catch (error) {
-    console.error(`Failed to send A2A task to ${agentType}:`, error);
+    console.error(`Failed to send A2A HTTP task to ${agentType}:`, error);
     throw new Error(`Failed to send A2A task to ${agentType}: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }

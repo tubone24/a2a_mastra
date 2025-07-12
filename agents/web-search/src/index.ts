@@ -49,6 +49,36 @@ async function startServer() {
     app.use('/api', apiRoutes);
     app.use('/', apiRoutes); // Mount at root for health check
     
+    // Standard Mastra agent endpoint
+    app.post('/api/agents/:agentId/generate', async (req, res) => {
+      try {
+        const { agentId } = req.params;
+        const { messages, threadId, resourceId } = req.body;
+        
+        // Validate agent exists
+        const agent = mastra.getAgent(agentId);
+        if (!agent) {
+          return res.status(404).json({
+            error: `Agent ${agentId} not found`,
+            availableAgents: [AGENT_ID] // This agent only has one agent registered
+          });
+        }
+        
+        // Generate response - pass messages as first argument
+        const response = await agent.generate(messages, {
+          threadId,
+          resourceId
+        });
+        
+        res.json(response);
+      } catch (error) {
+        console.error(`Agent ${req.params.agentId} generation error:`, error);
+        res.status(500).json({
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
+      }
+    });
+    
     app.listen(PORT, () => {
       console.log(`${AGENT_NAME} (${AGENT_ID}) listening on port ${PORT}`);
       console.log(`A2A Protocol endpoints available at http://localhost:${PORT}/api/a2a/`);

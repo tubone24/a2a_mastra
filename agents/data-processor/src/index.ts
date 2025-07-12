@@ -24,6 +24,36 @@ console.log('Langfuse client initialized:', {
 app.use('/api/a2a', a2aRoutes);
 app.use('/api', apiRoutes);
 
+// Standard Mastra agent endpoint
+app.post('/api/agents/:agentId/generate', async (req, res) => {
+  try {
+    const { agentId } = req.params;
+    const { messages, threadId, resourceId } = req.body;
+    
+    // Validate agent exists
+    const agent = mastra.getAgent(agentId);
+    if (!agent) {
+      return res.status(404).json({
+        error: `Agent ${agentId} not found`,
+        availableAgents: [AGENT_ID] // This agent only has one agent registered
+      });
+    }
+    
+    // Generate response - pass messages as first argument
+    const response = await agent.generate(messages, {
+      threadId,
+      resourceId
+    });
+    
+    res.json(response);
+  } catch (error) {
+    console.error(`Agent ${req.params.agentId} generation error:`, error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
 // Graceful shutdown handler
 process.on('SIGINT', async () => {
   console.log('Shutting down gracefully...');
