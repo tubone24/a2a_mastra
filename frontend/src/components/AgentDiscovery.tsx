@@ -20,6 +20,36 @@ interface AgentInfo {
   supportedTaskTypes?: string[]
   supportedAudienceTypes?: string[]
   supportedMessageTypes?: string[]
+  skills?: Array<{
+    id: string
+    name: string
+    description: string
+    tags?: string[]
+  }>
+}
+
+interface MastraAgentInfo {
+  name: string
+  description: string
+  url: string
+  provider: {
+    organization: string
+    url: string
+  }
+  version: string
+  capabilities: {
+    streaming: boolean
+    pushNotifications: boolean
+    stateTransitionHistory: boolean
+  }
+  defaultInputModes: string[]
+  defaultOutputModes: string[]
+  skills: Array<{
+    id: string
+    name: string
+    description: string
+    tags: string[]
+  }>
 }
 
 interface DiscoveryResult {
@@ -28,7 +58,7 @@ interface DiscoveryResult {
     name: string
     status: string
   }
-  connectedAgents: AgentInfo[]
+  connectedAgents: MastraAgentInfo[]
   totalAgents: number
 }
 
@@ -64,6 +94,47 @@ export function AgentDiscovery() {
     }
   }
 
+  // Helper function to convert Mastra agent info to AgentInfo format
+  const convertMastraAgentToAgentInfo = (mastraAgent: MastraAgentInfo): AgentInfo => {
+    // Extract agent ID from URL (e.g., "/a2a/web-search-agent-01" -> "web-search-agent-01")
+    const agentId = mastraAgent.url.split('/').pop() || 'unknown'
+    
+    // Determine agent type based on name or ID
+    let agentType = 'unknown'
+    if (agentId.includes('data-processor')) {
+      agentType = 'processor'
+    } else if (agentId.includes('summarizer')) {
+      agentType = 'summarizer'
+    } else if (agentId.includes('web-search')) {
+      agentType = 'web-search'
+    }
+
+    // Extract capabilities from Mastra capabilities object
+    const capabilities: string[] = []
+    if (mastraAgent.capabilities.streaming) capabilities.push('streaming')
+    if (mastraAgent.capabilities.pushNotifications) capabilities.push('push-notifications')
+    if (mastraAgent.capabilities.stateTransitionHistory) capabilities.push('state-history')
+    
+    // Add input/output modes as capabilities
+    capabilities.push(...mastraAgent.defaultInputModes.map(mode => `input-${mode}`))
+    capabilities.push(...mastraAgent.defaultOutputModes.map(mode => `output-${mode}`))
+
+    return {
+      id: agentId,
+      name: mastraAgent.name,
+      type: agentType,
+      description: mastraAgent.description,
+      capabilities,
+      endpoint: mastraAgent.url,
+      status: 'online', // Assume online if returned from discovery
+      version: mastraAgent.version,
+      supportedProtocols: ['A2A', 'Mastra'],
+      skills: mastraAgent.skills,
+      // Extract supported task types from skills if available
+      supportedTaskTypes: mastraAgent.skills.map(skill => skill.name)
+    }
+  }
+
   const discoverAgents = async () => {
     setIsLoading(true)
     setError(null)
@@ -78,6 +149,9 @@ export function AgentDiscovery() {
       
       const discoveryResult: DiscoveryResult = await response.json()
       
+      // Convert Mastra agents to AgentInfo format
+      const convertedAgents = discoveryResult.connectedAgents.map(convertMastraAgentToAgentInfo)
+      
       // Add gateway to agents list
       const allAgents: AgentInfo[] = [
         {
@@ -90,7 +164,7 @@ export function AgentDiscovery() {
           status: discoveryResult.gateway.status as 'online' | 'offline' | 'unknown',
           supportedProtocols: ['A2A', 'HTTP'],
         },
-        ...discoveryResult.connectedAgents
+        ...convertedAgents
       ]
       
       setAgents(allAgents)
@@ -215,13 +289,19 @@ export function AgentDiscovery() {
                       </div>
                     </div>
                     
-                    {agent.supportedTaskTypes && agent.supportedTaskTypes.length > 0 && (
+                    {((agent.supportedTaskTypes && agent.supportedTaskTypes.length > 0) || 
+                      (agent.skills && agent.skills.length > 0)) && (
                       <div>
-                        <h4 className="text-sm font-medium mb-2">対応タスク</h4>
+                        <h4 className="text-sm font-medium mb-2">対応タスク/スキル</h4>
                         <div className="flex flex-wrap gap-1">
-                          {agent.supportedTaskTypes.map((taskType) => (
+                          {agent.supportedTaskTypes?.map((taskType) => (
                             <Badge key={taskType} variant="secondary" className="text-xs">
                               {taskType}
+                            </Badge>
+                          ))}
+                          {agent.skills?.map((skill) => (
+                            <Badge key={skill.id} variant="default" className="text-xs">
+                              {skill.name.replace('brave-search_', '')}
                             </Badge>
                           ))}
                         </div>

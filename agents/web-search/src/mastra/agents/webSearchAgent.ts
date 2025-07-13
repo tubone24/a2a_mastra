@@ -1,9 +1,15 @@
 import { Agent } from '@mastra/core';
 import { getBedrockModel } from '../../config/bedrock.js';
+import { initializeMCPClient } from '../../utils/mcpClient.js';
 
 const AGENT_NAME = process.env.AGENT_NAME || 'Web Search Agent';
 
-export function createWebSearchAgent(mcpTools: any): Agent {
+export async function createWebSearchAgent(): Promise<Agent> {
+  // Initialize MCP Client and get tools
+  const mcpTools = await initializeMCPClient();
+  
+  console.log('Search tools loaded:', Object.keys(mcpTools));
+
   return new Agent({
     name: AGENT_NAME,
     instructions: `
