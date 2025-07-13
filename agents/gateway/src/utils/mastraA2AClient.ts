@@ -73,13 +73,7 @@ export async function sendA2AMessage(agentType: 'data-processor' | 'summarizer' 
     
     console.log(`A2A response from ${agentType}:`, JSON.stringify(response, null, 2));
     
-    // Extract text from response if it's in the A2A task format
-    const firstPart = response.task?.status?.message?.parts?.[0];
-    if (firstPart && 'text' in firstPart) {
-      console.log(`Extracting text from A2A response for ${agentType}`);
-      return firstPart.text;
-    }
-    
+    // Return the complete A2A response to preserve artifacts and full data structure
     return response;
   } catch (error) {
     console.error(`Failed to send A2A message to ${agentType}:`, error);
@@ -138,12 +132,8 @@ async function sendA2AMessageHTTP(agentType: 'data-processor' | 'summarizer' | '
             const taskResult: any = await taskResponse.json();
             if (taskResult.task?.status?.state !== "working") {
               console.log(`Task completed for ${agentType}:`, JSON.stringify(taskResult, null, 2));
-              // Extract text from message parts for new A2A format
-              const taskFirstPart = taskResult.task?.status?.message?.parts?.[0];
-              if (taskFirstPart && 'text' in taskFirstPart) {
-                return taskFirstPart.text;
-              }
-              return taskResult.task?.result || taskResult;
+              // Return complete A2A response to preserve artifacts
+              return taskResult;
             }
           } else {
             break;
@@ -151,16 +141,12 @@ async function sendA2AMessageHTTP(agentType: 'data-processor' | 'summarizer' | '
         }
       }
       
-      // Extract text from message parts for new A2A format
-      const resultFirstPart = result.task.status?.message?.parts?.[0];
-      if (resultFirstPart && 'text' in resultFirstPart) {
-        console.log(`Extracting text from A2A message for ${agentType}`);
-        return resultFirstPart.text;
-      }
+      // Return complete A2A response to preserve artifacts
+      return result;
     }
     
-    console.log(`Returning immediate result for ${agentType}:`, JSON.stringify(result.task?.result || result, null, 2));
-    return result.task?.result || result;
+    console.log(`Returning immediate result for ${agentType}:`, JSON.stringify(result, null, 2));
+    return result;
   } catch (error) {
     console.error(`Failed to send A2A HTTP message to ${agentType}:`, error);
     throw new Error(`Failed to send A2A message to ${agentType}: ${error instanceof Error ? error.message : 'Unknown error'}`);

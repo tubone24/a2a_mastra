@@ -1,4 +1,5 @@
 import express from 'express';
+import { mastra } from '../mastra/index.js';
 import { processSearchTask } from '../mastra/workflows/searchTaskProcessor.js';
 
 const router = express.Router();
@@ -8,14 +9,21 @@ const AGENT_NAME = process.env.AGENT_NAME || 'Web Search Agent';
 const PORT = process.env.PORT || 3004;
 
 // Task storage (in production, this would be a database)
-const tasks = new Map();
+export const tasks = new Map();
 
-// We'll receive the webSearchAgent as a parameter when router is initialized
-let webSearchAgent: any;
+// We'll import the webSearchAgent from the mastra index
+let webSearchAgent: any = null;
 
-export function createA2ARoutes(agent: any) {
-  webSearchAgent = agent;
-  return router;
+// Helper function to get the agent (lazy loading)
+function getWebSearchAgent() {
+  if (!webSearchAgent) {
+    try {
+      webSearchAgent = mastra?.getAgent?.('web-search-agent-01');
+    } catch (error) {
+      console.error('Failed to get web search agent:', error);
+    }
+  }
+  return webSearchAgent;
 }
 
 // A2A Task endpoint for receiving tasks from other agents
@@ -47,46 +55,71 @@ router.post('/task', async (req, res) => {
     });
     
     // Process task asynchronously
-    processSearchTask(taskData, taskId, webSearchAgent)
-      .then(result => {
+    processSearchTask(taskData, taskId, getWebSearchAgent())
+      .then((result: any) => {
         console.log(`${AGENT_NAME} completed search task`);
-        // Store task result
-        tasks.set(taskId, {
-          id: taskId,
-          status: { 
-            state: result.status === 'completed' ? 'completed' : 'failed', 
-            message: result.status === 'completed' ? 'Search completed successfully' : (result.error || 'Search failed') 
-          },
-          result: result,
-          createdAt: new Date().toISOString(),
-          completedAt: new Date().toISOString(),
-        });
+        // Store task result in A2A format
+        tasks.set(taskId, result);
       })
-      .catch(error => {
+      .catch((error: any) => {
         console.error(`${AGENT_NAME} task processing error:`, error);
         tasks.set(taskId, {
-          id: taskId,
-          status: { state: 'failed', message: error.message },
-          result: null,
-          createdAt: tasks.get(taskId)?.createdAt || new Date().toISOString(),
-          failedAt: new Date().toISOString(),
+          task: {
+            id: taskId,
+            status: {
+              state: 'failed',
+              timestamp: new Date().toISOString(),
+              message: {
+                role: 'agent',
+                parts: [{
+                  type: 'text',
+                  text: `エラーが発生しました: ${error.message}`
+                }]
+              }
+            },
+            artifacts: []
+          }
         });
       });
     
-    // Return task immediately with working status
+    // Return task immediately with working status in A2A format
     res.json({
-      id: taskId,
-      status: { state: 'working', message: 'Search task is being processed...' },
-      createdAt: new Date().toISOString(),
+      task: {
+        id: taskId,
+        status: {
+          state: 'working',
+          timestamp: new Date().toISOString(),
+          message: {
+            role: 'agent',
+            parts: [{
+              type: 'text',
+              text: 'Web検索タスクを処理中です...'
+            }]
+          }
+        },
+        artifacts: []
+      }
     });
     
   } catch (error) {
     console.error(`${AGENT_NAME} task creation error:`, error);
     const taskId = req.body.id || crypto.randomUUID();
     res.status(500).json({
-      id: taskId,
-      status: { state: 'failed', message: error instanceof Error ? error.message : 'Unknown error' },
-      error: error instanceof Error ? error.message : 'Unknown error',
+      task: {
+        id: taskId,
+        status: {
+          state: 'failed',
+          timestamp: new Date().toISOString(),
+          message: {
+            role: 'agent',
+            parts: [{
+              type: 'text',
+              text: `タスク作成エラー: ${error instanceof Error ? error.message : 'Unknown error'}`
+            }]
+          }
+        },
+        artifacts: []
+      }
     });
   }
 });
@@ -95,36 +128,71 @@ router.post('/task', async (req, res) => {
 router.get('/task/:taskId', (req, res) => {
   const { taskId } = req.params;
   
-  const task = tasks.get(taskId);
-  if (!task) {
+  const taskResult = tasks.get(taskId);
+  if (!taskResult) {
     return res.status(404).json({
-      error: 'Task not found',
-      taskId
+      task: {
+        id: taskId,
+        status: {
+          state: 'failed',
+          timestamp: new Date().toISOString(),
+          message: {
+            role: 'agent',
+            parts: [{
+              type: 'text',
+              text: 'タスクが見つかりません'
+            }]
+          }
+        },
+        artifacts: []
+      }
     });
   }
   
-  res.json(task);
+  res.json(taskResult);
 });
 
 // A2A Cancel Task endpoint
 router.delete('/task/:taskId', (req, res) => {
   const { taskId } = req.params;
   
-  const task = tasks.get(taskId);
-  if (!task) {
+  const taskResult = tasks.get(taskId);
+  if (!taskResult) {
     return res.status(404).json({
-      error: 'Task not found',
-      taskId
+      task: {
+        id: taskId,
+        status: {
+          state: 'failed',
+          timestamp: new Date().toISOString(),
+          message: {
+            role: 'agent',
+            parts: [{
+              type: 'text',
+              text: 'タスクが見つかりません'
+            }]
+          }
+        },
+        artifacts: []
+      }
     });
   }
   
-  if (task.status.state === 'working') {
-    task.status = { state: 'cancelled', message: 'Task cancelled by request' };
-    task.cancelledAt = new Date().toISOString();
-    tasks.set(taskId, task);
+  if (taskResult.task && taskResult.task.status.state === 'working') {
+    taskResult.task.status = {
+      state: 'cancelled',
+      timestamp: new Date().toISOString(),
+      message: {
+        role: 'agent',
+        parts: [{
+          type: 'text',
+          text: 'リクエストによりタスクがキャンセルされました'
+        }]
+      }
+    };
+    tasks.set(taskId, taskResult);
   }
   
-  res.json(task);
+  res.json(taskResult);
 });
 
 // A2A Message endpoint for receiving messages from other agents
@@ -146,8 +214,10 @@ router.post('/message', async (req, res) => {
     let taskData;
     try {
       taskData = JSON.parse(message.parts[0].text);
+      console.log(`Parsed taskData:`, JSON.stringify(taskData, null, 2));
     } catch {
       taskData = { type: 'web-search', query: message.parts[0].text };
+      console.log(`Fallback taskData:`, JSON.stringify(taskData, null, 2));
     }
     
     // Create a task for this message
@@ -156,40 +226,46 @@ router.post('/message', async (req, res) => {
     // Process the task asynchronously
     let result;
     try {
-      result = await processSearchTask(taskData, taskId, webSearchAgent);
+      // Always use our specialized search workflow for A2A messages
+      // Set default type if not provided
+      if (!taskData.type) {
+        taskData.type = 'web-search';
+      }
+      
+      const validTaskTypes = ['web-search', 'news-search', 'scholarly-search', 'comprehensive-search'];
+      
+      if (validTaskTypes.includes(taskData.type)) {
+        result = await processSearchTask(taskData, taskId, getWebSearchAgent());
+      } else {
+        // For unknown types, convert to general web search
+        result = await processSearchTask({
+          ...taskData,
+          type: 'web-search'
+        }, taskId, getWebSearchAgent());
+      }
     } catch (error) {
+      // Return error in the expected A2A task format
       result = {
-        status: 'failed',
-        error: error instanceof Error ? error.message : 'Unknown error',
-        processedBy: AGENT_ID,
+        task: {
+          id: taskId,
+          status: {
+            state: 'failed',
+            timestamp: new Date().toISOString(),
+            message: {
+              role: 'agent',
+              parts: [{
+                type: 'text',
+                text: `エラーが発生しました: ${error instanceof Error ? error.message : 'Unknown error'}`
+              }]
+            }
+          },
+          artifacts: []
+        }
       };
     }
     
-    // Return A2A compliant response with task
-    const taskState = result.status === 'completed' ? 'completed' : 'failed';
-    const taskMessage = result.status === 'completed' ? 'Search completed successfully' : (result as any).error || 'Search failed';
-    
-    res.json({
-      id: crypto.randomUUID(),
-      from: AGENT_ID,
-      to: from,
-      message: {
-        role: "assistant",
-        parts: [{
-          type: "text",
-          text: JSON.stringify(result)
-        }]
-      },
-      task: {
-        id: taskId,
-        status: {
-          state: taskState,
-          message: taskMessage
-        },
-        result: result
-      },
-      timestamp: new Date().toISOString(),
-    });
+    // Return the task structure directly
+    res.json(result);
     
   } catch (error) {
     console.error(`${AGENT_NAME} message processing error:`, error);
@@ -215,7 +291,13 @@ router.get('/agent', (req, res) => {
     supportedTaskTypes: ['web-search', 'news-search', 'scholarly-search', 'comprehensive-search'],
     supportedSearchOptions: ['maxResults', 'timeRange', 'language', 'region', 'category', 'safesearch'],
     supportedMessageTypes: ['text/plain', 'application/json'],
+    // Enhanced with Mastra agent capabilities
+    mastraAgent: {
+      id: AGENT_ID,
+      available: true,
+      tools: mastra?.getAgent?.(AGENT_ID)?.tools ? Object.keys(mastra.getAgent(AGENT_ID).tools) : [],
+    }
   });
 });
 
-export { router as a2aRoutes, tasks };
+export { router as a2aRoutes };

@@ -180,20 +180,35 @@ export async function processSearchTask(task: any, taskId: string, webSearchAgen
       console.log('Agent response text:', result.text);
 
       searchResult = {
-        status: 'completed',
-        processedBy: AGENT_ID,
-        result: {
-          query: enhancedQuery,
-          summary: result.text,
-          fullResponse: result,
-        },
-        metadata: {
-          completedAt: new Date().toISOString(),
-          searchType: validatedTask.type,
-          traceId: trace.id,
-          searchProvider: 'Brave Search (via MCP + Agent)',
-          usage: result.usage || {},
-        },
+        task: {
+          id: taskId,
+          status: {
+            state: 'completed',
+            timestamp: new Date().toISOString(),
+            message: {
+              role: 'agent',
+              parts: [{
+                type: 'text',
+                text: 'Web検索が正常に完了しました'
+              }]
+            }
+          },
+          artifacts: [{
+            type: 'search-result',
+            data: {
+              query: enhancedQuery,
+              summary: result.text,
+              fullResponse: result,
+            },
+            metadata: {
+              completedAt: new Date().toISOString(),
+              searchType: validatedTask.type,
+              traceId: trace.id,
+              searchProvider: 'Brave Search (via MCP + Agent)',
+              usage: result.usage || {},
+            }
+          }]
+        }
       };
 
       // Log successful completion
@@ -220,14 +235,21 @@ export async function processSearchTask(task: any, taskId: string, webSearchAgen
 
   } catch (error) {
     searchResult = {
-      status: 'failed',
-      error: error instanceof Error ? error.message : 'Unknown error',
-      processedBy: AGENT_ID,
-      metadata: {
-        completedAt: new Date().toISOString(),
-        searchType: validatedTask.type,
-        traceId: trace.id,
-      },
+      task: {
+        id: taskId,
+        status: {
+          state: 'failed',
+          timestamp: new Date().toISOString(),
+          message: {
+            role: 'agent',
+            parts: [{
+              type: 'text',
+              text: `エラーが発生しました: ${error instanceof Error ? error.message : 'Unknown error'}`
+            }]
+          }
+        },
+        artifacts: []
+      }
     };
   }
   

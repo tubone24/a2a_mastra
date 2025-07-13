@@ -10,6 +10,9 @@ let mcpTools: any = {};
 let webSearchAgent: Agent;
 let mastra: Mastra;
 
+// Export mastra instance for use in other modules
+export { mastra };
+
 // Initialize everything
 export async function initialize() {
   try {

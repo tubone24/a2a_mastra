@@ -1,6 +1,6 @@
 import { asyncTasks, AsyncTask } from './asyncTaskManager.js';
 import { completeWorkflowExecution } from './workflowManager.js';
-import { sendA2AMessage, sendA2ATask, pollTaskStatus } from '../../utils/mastraA2AClient.js';
+import { sendA2AMessage } from '../../utils/mastraA2AClient.js';
 
 // Helper function to extract key findings from synthesis result
 function extractKeyFindings(synthesisResult: any): string[] {
@@ -48,10 +48,10 @@ export async function executeDeepResearchWorkflow(
     task.progress = 10;
     asyncTasks.set(taskId, task);
 
-    // Phase 1: Comprehensive Web Search
+    // Phase 1: Comprehensive Web Search - 検索フェーズ開始 (10%)
     console.log(`Deep Research Phase 1: Starting comprehensive search for topic: ${topic}`);
     
-    const searchTaskId = await sendA2ATask('web-search', {
+    const searchResponse = await sendA2AMessage('web-search', {
       type: 'comprehensive-search',
       query: topic,
       options: {
@@ -60,37 +60,36 @@ export async function executeDeepResearchWorkflow(
       },
     });
 
-    // Poll for search completion
+    // Extract search result from A2A response
     let searchResult;
-    while (true) {
-      await new Promise(resolve => setTimeout(resolve, 3000)); // Poll every 3 seconds
-      
-      try {
-        const searchStatus = await pollTaskStatus('web-search', searchTaskId);
-        
-        if (searchStatus.status?.state === 'completed') {
-          searchResult = searchStatus.result;
-          task.progress = 40;
-          task.currentPhase = 'analyze';
-          asyncTasks.set(taskId, task);
-          break;
-        } else if (searchStatus.status?.state === 'failed') {
-          throw new Error(`Search task failed: ${searchStatus.error}`);
-        }
-        
-        // Update progress during search
-        task.progress = Math.min(35, task.progress + 5);
-        asyncTasks.set(taskId, task);
-        
-      } catch (pollError) {
-        console.warn(`Search polling error: ${pollError}, retrying...`);
+    if (searchResponse.task?.artifacts && searchResponse.task.artifacts.length > 0) {
+      const searchArtifact = searchResponse.task.artifacts.find((artifact: any) => artifact.type === 'search-result');
+      if (searchArtifact && searchArtifact.data) {
+        searchResult = {
+          searchResults: searchArtifact.data.summary,
+          fullResponse: searchArtifact.data.fullResponse,
+          query: searchArtifact.data.query,
+          metadata: searchArtifact.metadata,
+          sources: searchArtifact.data.fullResponse?.sources || [],
+        };
+      } else {
+        searchResult = searchResponse.task.artifacts[0].data || searchResponse;
       }
+    } else {
+      // Fallback to status message
+      const statusMessage = searchResponse.task?.status?.message?.parts?.[0]?.text;
+      searchResult = statusMessage || searchResponse;
     }
+    
+    // Update progress after search completion - 検索フェーズ完了 (33%)
+    task.progress = 33;
+    task.currentPhase = 'analyze';
+    asyncTasks.set(taskId, task);
 
     console.log(`Deep Research Phase 2: Analyzing search results`);
     
-    // Phase 2: Data Analysis
-    const analysisTaskId = await sendA2ATask('data-processor', {
+    // Phase 2: Data Analysis using A2A Message - データ分析フェーズ開始 (33%)
+    const analysisResponse = await sendA2AMessage('data-processor', {
       type: 'research-analysis',
       data: searchResult,
       options: {
@@ -100,36 +99,25 @@ export async function executeDeepResearchWorkflow(
       },
     });
 
-    // Poll for analysis completion
+    // Extract analysis result from A2A response
     let analysisResult;
-    while (true) {
-      await new Promise(resolve => setTimeout(resolve, 4000)); // Poll every 4 seconds
-      
-      try {
-        const analysisStatus = await pollTaskStatus('data-processor', analysisTaskId);
-        
-        if (analysisStatus.status?.state === 'completed') {
-          analysisResult = analysisStatus.result;
-          task.progress = 70;
-          task.currentPhase = 'synthesize';
-          asyncTasks.set(taskId, task);
-          break;
-        } else if (analysisStatus.status?.state === 'failed') {
-          throw new Error(`Analysis task failed: ${analysisStatus.error}`);
-        }
-        
-        // Update progress during analysis
-        task.progress = Math.min(65, task.progress + 5);
-        asyncTasks.set(taskId, task);
-        
-      } catch (pollError) {
-        console.warn(`Analysis polling error: ${pollError}, retrying...`);
-      }
+    if (analysisResponse.task?.artifacts && analysisResponse.task.artifacts.length > 0) {
+      const analysisArtifact = analysisResponse.task.artifacts[0];
+      analysisResult = analysisArtifact.data || analysisArtifact;
+    } else {
+      // Fallback to status message or direct response
+      const statusMessage = analysisResponse.task?.status?.message?.parts?.[0]?.text;
+      analysisResult = statusMessage || analysisResponse;
     }
+    
+    // Update progress after analysis completion - データ分析フェーズ完了 (66%)
+    task.progress = 66;
+    task.currentPhase = 'synthesize';
+    asyncTasks.set(taskId, task);
 
     console.log(`Deep Research Phase 3: Synthesizing comprehensive report`);
     
-    // Phase 3: Synthesis and Report Generation using A2A Message
+    // Phase 3: Synthesis and Report Generation using A2A Message - 結果統合フェーズ開始 (66%)
     const synthesisResponse = await sendA2AMessage('summarizer', {
       type: 'research-synthesis',
       data: {
@@ -145,17 +133,32 @@ export async function executeDeepResearchWorkflow(
       },
     });
     
-    // Parse the synthesis result if it's a JSON string
+    // Extract synthesis result from A2A response
     let synthesisResult;
+    if (synthesisResponse.task?.artifacts && synthesisResponse.task.artifacts.length > 0) {
+      const synthesisArtifact = synthesisResponse.task.artifacts[0];
+      synthesisResult = synthesisArtifact.data || synthesisArtifact;
+    } else {
+      // Fallback to status message or direct response
+      const statusMessage = synthesisResponse.task?.status?.message?.parts?.[0]?.text;
+      synthesisResult = statusMessage || synthesisResponse;
+    }
+    
+    // Parse the synthesis result if it's a JSON string
     try {
-      synthesisResult = typeof synthesisResponse === 'string' ? JSON.parse(synthesisResponse) : synthesisResponse;
+      if (typeof synthesisResult === 'string') {
+        synthesisResult = JSON.parse(synthesisResult);
+      }
     } catch (e) {
-      // If parsing fails, use the response as is
-      synthesisResult = { summary: synthesisResponse };
+      // If parsing fails, wrap string response 
+      if (typeof synthesisResult === 'string') {
+        synthesisResult = { summary: synthesisResult };
+      }
     }
 
-    // Update progress to 95%
+    // Update progress to 95% - 結果統合フェーズ完了 (95%)
     task.progress = 95;
+    task.currentPhase = 'completed';
     asyncTasks.set(taskId, task);
 
     // Complete the task

@@ -127,11 +127,35 @@ router.post('/', async (req, res) => {
         try {
           updateWorkflowStep(workflowExecution.id, processStep.id, { status: 'in_progress' });
           
-          result = await sendA2AMessage('data-processor', {
+          const processResponse = await sendA2AMessage('data-processor', {
             type: 'process',
             data: validatedRequest.data || {},
             context: validatedRequest.context,
           });
+          
+          // Extract result from A2A response format
+          if (typeof processResponse === 'string') {
+            result = processResponse;
+          } else {
+            // Check if response has A2A task format with artifacts
+            const taskArtifacts = processResponse.task?.artifacts;
+            if (taskArtifacts && taskArtifacts.length > 0) {
+              // Use the first artifact's data or fallback to the whole artifact
+              result = taskArtifacts[0].data || taskArtifacts[0];
+            } else {
+              // Try to extract from message parts
+              const taskPart = processResponse.task?.status?.message?.parts?.[0];
+              const messagePart = processResponse.message?.parts?.[0];
+              
+              if (taskPart && 'text' in taskPart) {
+                result = taskPart.text;
+              } else if (messagePart && 'text' in messagePart) {
+                result = messagePart.text;
+              } else {
+                result = processResponse;
+              }
+            }
+          }
           
           updateWorkflowStep(workflowExecution.id, processStep.id, { 
             status: 'completed', 
@@ -178,12 +202,36 @@ router.post('/', async (req, res) => {
         try {
           updateWorkflowStep(workflowExecution.id, summarizeStep.id, { status: 'in_progress' });
           
-          result = await sendA2AMessage('summarizer', {
+          const summarizeResponse = await sendA2AMessage('summarizer', {
             type: 'summarize',
             data: validatedRequest.data || {},
             context: validatedRequest.context,
             audienceType: validatedRequest.audienceType || 'general',
           });
+          
+          // Extract result from A2A response format
+          if (typeof summarizeResponse === 'string') {
+            result = summarizeResponse;
+          } else {
+            // Check if response has A2A task format with artifacts
+            const taskArtifacts = summarizeResponse.task?.artifacts;
+            if (taskArtifacts && taskArtifacts.length > 0) {
+              // Use the first artifact's data or fallback to the whole artifact
+              result = taskArtifacts[0].data || taskArtifacts[0];
+            } else {
+              // Try to extract from message parts
+              const taskPart = summarizeResponse.task?.status?.message?.parts?.[0];
+              const messagePart = summarizeResponse.message?.parts?.[0];
+              
+              if (taskPart && 'text' in taskPart) {
+                result = taskPart.text;
+              } else if (messagePart && 'text' in messagePart) {
+                result = messagePart.text;
+              } else {
+                result = summarizeResponse;
+              }
+            }
+          }
           
           updateWorkflowStep(workflowExecution.id, summarizeStep.id, { 
             status: 'completed', 
@@ -397,12 +445,47 @@ router.post('/', async (req, res) => {
           updateWorkflowStep(workflowExecution.id, searchStep.id, { status: 'in_progress' });
           
           const searchMessageQuery = validatedRequest.query || (validatedRequest.data != null ? JSON.stringify(validatedRequest.data) : '');
-          result = await sendA2AMessage('web-search', {
+          const searchResponse = await sendA2AMessage('web-search', {
             type: validatedRequest.type,
             query: searchMessageQuery,
             context: validatedRequest.context,
             options: validatedRequest.searchOptions,
           });
+          
+          // Extract search results from A2A response format
+          if (typeof searchResponse === 'string') {
+            result = searchResponse;
+          } else {
+            // Check if response has A2A task format with artifacts
+            const taskArtifacts = searchResponse.task?.artifacts;
+            if (taskArtifacts && taskArtifacts.length > 0) {
+              // Find search-result artifact
+              const searchArtifact = taskArtifacts.find((artifact: any) => artifact.type === 'search-result');
+              if (searchArtifact && searchArtifact.data) {
+                result = {
+                  searchResults: searchArtifact.data.summary || searchArtifact.data,
+                  fullResponse: searchArtifact.data.fullResponse,
+                  query: searchArtifact.data.query,
+                  metadata: searchArtifact.metadata,
+                };
+              } else {
+                // Fallback to first artifact
+                result = taskArtifacts[0].data || searchResponse;
+              }
+            } else {
+              // Try to extract from message parts
+              const taskPart = searchResponse.task?.status?.message?.parts?.[0];
+              const messagePart = searchResponse.message?.parts?.[0];
+              
+              if (taskPart && 'text' in taskPart) {
+                result = taskPart.text;
+              } else if (messagePart && 'text' in messagePart) {
+                result = messagePart.text;
+              } else {
+                result = searchResponse;
+              }
+            }
+          }
           
           updateWorkflowStep(workflowExecution.id, searchStep.id, { 
             status: 'completed', 

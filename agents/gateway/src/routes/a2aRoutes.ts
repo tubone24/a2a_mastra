@@ -37,26 +37,84 @@ router.post('/message', async (req, res) => {
   try {
     console.log(`${AGENT_NAME} received A2A message:`, req.body);
     
-    const { from, message } = req.body;
+    const { id, from, message, timestamp, to } = req.body;
     
-    // Process the message using the gateway agent
-    const response = await gatewayAgent.generate([
-      { role: "user", content: message.parts[0].text }
-    ]);
+    // Validate target agent ID if specified
+    if (to && to !== AGENT_ID) {
+      return res.status(400).json({
+        error: `Message intended for agent ${to}, but this is ${AGENT_ID}`,
+        from: AGENT_ID,
+      });
+    }
     
-    res.json({
-      id: crypto.randomUUID(),
-      from: AGENT_ID,
-      to: from,
-      message: {
-        role: "assistant",
-        parts: [{
-          type: "text",
-          text: response.text
-        }]
-      },
-      timestamp: new Date().toISOString(),
-    });
+    // Parse the task from the message content
+    let taskData;
+    try {
+      taskData = JSON.parse(message.parts[0].text);
+      console.log(`Parsed taskData:`, JSON.stringify(taskData, null, 2));
+    } catch {
+      taskData = { type: 'routing', data: message.parts[0].text };
+      console.log(`Fallback taskData:`, JSON.stringify(taskData, null, 2));
+    }
+    
+    // Create a task for this message
+    const taskId = crypto.randomUUID();
+    
+    // Process the task
+    let result;
+    try {
+      // Process the message using the gateway agent
+      const response = await gatewayAgent.generate([
+        { role: "user", content: message.parts[0].text }
+      ]);
+      
+      result = {
+        task: {
+          id: taskId,
+          status: {
+            state: 'completed',
+            timestamp: new Date().toISOString(),
+            message: {
+              role: 'agent',
+              parts: [{
+                type: 'text',
+                text: 'ゲートウェイによりメッセージが正常に処理されました'
+              }]
+            }
+          },
+          artifacts: [{
+            type: 'response',
+            data: {
+              originalMessage: message.parts[0].text,
+              response: response.text,
+              processedBy: AGENT_ID
+            }
+          }]
+        }
+      };
+    } catch (error) {
+      // Return error in the expected A2A task format
+      result = {
+        task: {
+          id: taskId,
+          status: {
+            state: 'failed',
+            timestamp: new Date().toISOString(),
+            message: {
+              role: 'agent',
+              parts: [{
+                type: 'text',
+                text: `エラーが発生しました: ${error instanceof Error ? error.message : 'Unknown error'}`
+              }]
+            }
+          },
+          artifacts: []
+        }
+      };
+    }
+    
+    // Return the task structure directly
+    res.json(result);
     
   } catch (error) {
     console.error(`${AGENT_NAME} message processing error:`, error);
@@ -72,31 +130,63 @@ router.post('/task', async (req, res) => {
   try {
     console.log(`${AGENT_NAME} received A2A task:`, req.body);
     
-    const taskId = crypto.randomUUID();
+    const { to } = req.body;
     
-    // Handle the task and return task information
+    // Validate target agent ID if specified
+    if (to && to !== AGENT_ID) {
+      return res.status(400).json({
+        error: `Task intended for agent ${to}, but this is ${AGENT_ID}`,
+        from: AGENT_ID,
+      });
+    }
+    
+    const taskId = req.body.id || crypto.randomUUID();
+    
+    // Handle the task and return task information in A2A format
     res.json({
-      id: taskId,
-      status: {
-        state: 'completed',
-        message: 'Task completed by gateway agent'
-      },
-      result: {
-        processedBy: AGENT_ID,
-        completedAt: new Date().toISOString(),
-        message: 'Task routed and processed successfully'
+      task: {
+        id: taskId,
+        status: {
+          state: 'completed',
+          timestamp: new Date().toISOString(),
+          message: {
+            role: 'agent',
+            parts: [{
+              type: 'text',
+              text: 'ゲートウェイエージェントによりタスクが正常に処理されました'
+            }]
+          }
+        },
+        artifacts: [{
+          type: 'routing-result',
+          data: {
+            processedBy: AGENT_ID,
+            completedAt: new Date().toISOString(),
+            message: 'Task routed and processed successfully'
+          }
+        }]
       }
     });
     
   } catch (error) {
     console.error(`${AGENT_NAME} task processing error:`, error);
+    const taskId = req.body.id || crypto.randomUUID();
     res.status(500).json({
-      id: req.body.id || crypto.randomUUID(),
-      status: {
-        state: 'failed',
-        message: error instanceof Error ? error.message : 'Unknown error'
-      },
-      error: error instanceof Error ? error.message : 'Unknown error'
+      task: {
+        id: taskId,
+        status: {
+          state: 'failed',
+          timestamp: new Date().toISOString(),
+          message: {
+            role: 'agent',
+            parts: [{
+              type: 'text',
+              text: `タスク処理エラー: ${error instanceof Error ? error.message : 'Unknown error'}`
+            }]
+          }
+        },
+        artifacts: []
+      }
     });
   }
 });
@@ -108,37 +198,130 @@ router.get('/task/:taskId', (req, res) => {
   // Check if this is an async task we're managing
   const asyncTask = asyncTasks.get(taskId);
   if (asyncTask) {
+    // Convert async task to A2A format
+    const state = asyncTask.status === 'working' ? 'working' : 
+                  asyncTask.status === 'completed' ? 'completed' :
+                  asyncTask.status === 'cancelled' ? 'failed' : 'failed';
+    const phaseNameMap: Record<string, string> = {
+      'search': 'Web検索フェーズ',
+      'analyze': 'データ分析フェーズ', 
+      'synthesize': '結果統合フェーズ',
+      'completed': '完了'
+    };
+    
+    const statusText = asyncTask.status === 'working' ? 
+      `${phaseNameMap[asyncTask.currentPhase] || asyncTask.currentPhase} (${asyncTask.progress}%)` :
+      asyncTask.status === 'completed' ? 'Deep Research完了' :
+      asyncTask.status === 'cancelled' ? 'タスクがキャンセルされました' :
+      asyncTask.status === 'failed' ? `失敗: ${asyncTask.error}` :
+      'タスク開始中';
+    
     return res.json({
-      taskId: asyncTask.id,
-      status: asyncTask.status,
-      progress: asyncTask.progress,
-      currentPhase: asyncTask.currentPhase,
-      phases: asyncTask.phases,
-      result: asyncTask.result,
-      error: asyncTask.error,
-      startedAt: asyncTask.startedAt,
-      completedAt: asyncTask.completedAt,
-      estimatedDuration: asyncTask.estimatedDuration,
-      details: asyncTask.status === 'working' ? 
-        `Processing ${asyncTask.currentPhase} phase (${asyncTask.progress}%)` :
-        asyncTask.status === 'completed' ? 'Research completed successfully' :
-        asyncTask.status === 'failed' ? `Failed: ${asyncTask.error}` :
-        'Task initiated',
-      metadata: asyncTask.metadata,
-      workflowExecutionId: asyncTask.workflowExecutionId,
+      task: {
+        id: asyncTask.id,
+        status: {
+          state,
+          timestamp: asyncTask.completedAt || asyncTask.startedAt,
+          message: {
+            role: 'agent',
+            parts: [{
+              type: 'text',
+              text: statusText
+            }]
+          }
+        },
+        artifacts: asyncTask.result ? [{
+          type: 'workflow-result',
+          data: asyncTask.result,
+          metadata: {
+            progress: asyncTask.progress,
+            currentPhase: asyncTask.currentPhase,
+            phases: asyncTask.phases,
+            startedAt: asyncTask.startedAt,
+            completedAt: asyncTask.completedAt,
+            estimatedDuration: asyncTask.estimatedDuration,
+            workflowExecutionId: asyncTask.workflowExecutionId
+          }
+        }] : []
+      }
     });
   }
   
-  // Fallback for other task types (legacy behavior)
+  // Fallback for other task types (A2A format)
   res.json({
-    id: taskId,
-    status: {
-      state: 'completed',
-      message: 'Task completed'
-    },
-    result: {
-      processedBy: AGENT_ID,
-      completedAt: new Date().toISOString(),
+    task: {
+      id: taskId,
+      status: {
+        state: 'completed',
+        timestamp: new Date().toISOString(),
+        message: {
+          role: 'agent',
+          parts: [{
+            type: 'text',
+            text: 'タスクが正常に完了しました'
+          }]
+        }
+      },
+      artifacts: [{
+        type: 'routing-result',
+        data: {
+          processedBy: AGENT_ID,
+          completedAt: new Date().toISOString(),
+        }
+      }]
+    }
+  });
+});
+
+// A2A Cancel Task endpoint
+router.delete('/task/:taskId', (req, res) => {
+  const { taskId } = req.params;
+  
+  // Check if this is an async task we're managing
+  const asyncTask = asyncTasks.get(taskId);
+  if (asyncTask) {
+    if (asyncTask.status === 'working') {
+      asyncTask.status = 'cancelled';
+      asyncTask.error = 'Task cancelled by request';
+      asyncTask.completedAt = new Date().toISOString();
+      asyncTasks.set(taskId, asyncTask);
+    }
+    
+    return res.json({
+      task: {
+        id: asyncTask.id,
+        status: {
+          state: 'failed',
+          timestamp: asyncTask.completedAt || new Date().toISOString(),
+          message: {
+            role: 'agent',
+            parts: [{
+              type: 'text',
+              text: 'リクエストによりタスクがキャンセルされました'
+            }]
+          }
+        },
+        artifacts: []
+      }
+    });
+  }
+  
+  // Fallback for other task types (A2A format)
+  res.json({
+    task: {
+      id: taskId,
+      status: {
+        state: 'failed',
+        timestamp: new Date().toISOString(),
+        message: {
+          role: 'agent',
+          parts: [{
+            type: 'text',
+            text: 'リクエストによりタスクがキャンセルされました'
+          }]
+        }
+      },
+      artifacts: []
     }
   });
 });

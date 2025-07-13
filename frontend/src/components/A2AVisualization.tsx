@@ -83,8 +83,73 @@ export function A2AVisualization({ isActive, taskType, workflowExecutionId, task
       if (response.ok) {
         const taskData = await response.json()
         console.log('✅ Task data received:', taskData)
-        setTaskData(taskData)
-        return taskData
+        
+        // 新しいA2A形式のレスポンスを処理
+        if (taskData.task) {
+          // 進捗とフェーズ情報を抽出
+          let extractedProgress, extractedPhase;
+          
+          // artifactsから進捗情報を抽出
+          const workflowArtifact = taskData.task.artifacts?.find((artifact: {type: string, metadata?: {progress?: number, currentPhase?: string}}) => artifact.type === 'workflow-result');
+          if (workflowArtifact?.metadata) {
+            extractedProgress = workflowArtifact.metadata.progress;
+            extractedPhase = workflowArtifact.metadata.currentPhase;
+          }
+          
+          // メッセージから進捗情報を抽出 (フォールバック)
+          if ((extractedProgress === undefined || extractedPhase === undefined) && taskData.task.status?.message?.parts?.[0]?.text) {
+            const messageText = taskData.task.status.message.parts[0].text;
+            const progressMatch = messageText.match(/(\d+)%/);
+            
+            // 日本語と英語のフェーズ名に対応
+            const phaseMatch = messageText.match(/(search|analyze|synthesize|Web検索|データ分析|結果統合)/);
+            
+            if (progressMatch && extractedProgress === undefined) {
+              extractedProgress = parseInt(progressMatch[1]);
+            }
+            if (phaseMatch && extractedPhase === undefined) {
+              const phase = phaseMatch[1];
+              // 日本語フェーズ名を英語にマップ
+              const phaseMap: Record<string, string> = {
+                'Web検索フェーズ': 'search',
+                'Web検索': 'search',
+                'データ分析フェーズ': 'analyze', 
+                'データ分析': 'analyze',
+                '結果統合フェーズ': 'synthesize',
+                '結果統合': 'synthesize'
+              };
+              extractedPhase = phaseMap[phase] || phase;
+            }
+          }
+          
+          const processedTaskData = {
+            id: taskData.task.id,
+            status: {
+              state: taskData.task.status.state,
+              timestamp: taskData.task.status.timestamp,
+              message: taskData.task.status.message?.parts?.[0]?.text || 'Processing...'
+            },
+            artifacts: taskData.task.artifacts || [],
+            // 結果を抽出
+            result: taskData.task.artifacts && taskData.task.artifacts.length > 0 ? 
+              taskData.task.artifacts.find((artifact: {type: string, data?: unknown}) => artifact.type === 'workflow-result')?.data :
+              null,
+            // 進捗情報を抽出
+            progress: extractedProgress,
+            currentPhase: extractedPhase
+          }
+          
+          console.log('📊 Processed task data:', processedTaskData)
+          console.log('🔍 Debug - status.state:', processedTaskData.status.state)
+          console.log('🔍 Debug - progress:', processedTaskData.progress)
+          console.log('🔍 Debug - currentPhase:', processedTaskData.currentPhase)
+          setTaskData(processedTaskData)
+          return processedTaskData
+        } else {
+          // 従来形式のフォールバック
+          setTaskData(taskData)
+          return taskData
+        }
       } else {
         console.log('❌ Task API returned error status:', response.status)
       }
@@ -201,14 +266,40 @@ export function A2AVisualization({ isActive, taskType, workflowExecutionId, task
           'synthesize': '結果統合フェーズ'
         }
         
+        // タスクが完了している場合は進捗とフェーズを更新
+        let actualProgress = progress
+        let actualPhase = phase
+        
+        if (taskData && taskData.status) {
+          const status = taskData.status as {state: string}
+          if (status.state === 'completed') {
+            actualProgress = 100
+            actualPhase = 'completed'
+          } else if (taskData.progress !== undefined) {
+            actualProgress = taskData.progress as number
+          }
+          if (taskData.currentPhase) {
+            actualPhase = taskData.currentPhase as string
+          }
+        }
+        
         return phases.map((p, index) => {
           let status: 'pending' | 'active' | 'completed'
-          if (phase === p) {
-            status = 'active'
-          } else if (phases.indexOf(phase) > index) {
+          // より正確な進捗ベースのステータス判定
+          if (actualPhase === 'completed' || actualProgress === 100) {
             status = 'completed'
+          } else if (actualPhase === p) {
+            status = 'active'
           } else {
-            status = 'pending'
+            // 進捗率ベースでステータスを判定
+            const phaseThresholds = [33, 66, 95] // search, analyze, synthesize
+            if (actualProgress > phaseThresholds[index]) {
+              status = 'completed'
+            } else if (actualProgress > (index > 0 ? phaseThresholds[index - 1] : 0)) {
+              status = 'active'
+            } else {
+              status = 'pending'
+            }
           }
           
           return {
@@ -220,11 +311,11 @@ export function A2AVisualization({ isActive, taskType, workflowExecutionId, task
                    p === 'analyze' ? 'processing' as const :
                    'summarizing' as const,
             status,
-            message: `${phaseNames[p as keyof typeof phaseNames]} ${status === 'active' ? `(${progress}%)` : ''}`,
+            message: `${phaseNames[p as keyof typeof phaseNames]} ${status === 'active' ? `(${actualProgress}%)` : status === 'completed' ? '完了' : '待機中'}`,
             timestamp: Date.now() - (3 - index) * 1000,
             details: taskData && status === 'completed' ? {
               request: `${p} phase request`,
-              response: (taskData.subTasks as Record<string, unknown>)?.[p] || `${p} completed`,
+              response: taskData.result ? JSON.stringify(taskData.result, null, 2) : `${p} completed`,
               method: 'POST',
               endpoint: '/api/a2a/task',
               duration: 2000
@@ -233,15 +324,44 @@ export function A2AVisualization({ isActive, taskType, workflowExecutionId, task
         })
       }
       
-      if (taskProgress) {
-        const steps = generateDeepResearchSteps(taskProgress.progress, taskProgress.phase, taskData || undefined)
-        setSteps(steps)
+      // 進捗情報を決定 - taskDataから取得するかtaskProgressから取得
+      let currentProgress = taskProgress?.progress || 0
+      let currentPhase = taskProgress?.phase || 'search'
+      
+      if (taskData && taskData.status) {
+        const status = taskData.status as {state: string}
+        if (status.state === 'completed') {
+          currentProgress = 100
+          currentPhase = 'completed'
+        } else {
+          if (taskData.progress !== undefined) {
+            currentProgress = taskData.progress as number
+          }
+          if (taskData.currentPhase) {
+            currentPhase = taskData.currentPhase as string
+          }
+        }
       }
+      
+      const steps = generateDeepResearchSteps(currentProgress, currentPhase, taskData || undefined)
+      setSteps(steps)
       
       // タスクデータを定期的に取得
       if (isActive) {
-        const interval = setInterval(() => {
-          fetchTaskData(taskId)
+        const interval = setInterval(async () => {
+          const data = await fetchTaskData(taskId)
+          // タスクが完了した場合はポーリング停止
+          if (data && (
+            (data.status && (data.status as {state: string}).state === 'completed') ||
+            (data.progress !== undefined && data.progress === 100) ||
+            (data.currentPhase === 'completed')
+          )) {
+            console.log('🛑 Task completed - stopping polling')
+            clearInterval(interval)
+            // isActiveをfalseに設定して完了状態に移行
+            return true // この戻り値でポーリング停止を通知
+          }
+          return false
         }, 5000)
         
         return () => clearInterval(interval)
@@ -454,25 +574,72 @@ export function A2AVisualization({ isActive, taskType, workflowExecutionId, task
         )}
 
         {/* Deep Research用の進捗表示 */}
-        {taskType === 'deep-research' && (isActive || taskId) && taskProgress && (
+        {taskType === 'deep-research' && (isActive || taskId) && (
           <div className="mt-4 space-y-3">
-            <div className="p-3 bg-blue-50 rounded-md">
-              <div className="flex items-center gap-2 text-sm text-blue-700 mb-2">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span className="font-medium">Deep Research実行中... ({taskProgress.progress}%)</span>
-              </div>
-              <div className="text-xs text-blue-600">
-                現在のフェーズ: {taskProgress.phase === 'search' ? 'Web検索' : 
-                              taskProgress.phase === 'analyze' ? 'データ分析' :
-                              taskProgress.phase === 'synthesize' ? '結果統合' : taskProgress.phase}
-              </div>
-              <div className="w-full bg-blue-200 rounded-full h-2 mt-2">
-                <div 
-                  className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
-                  style={{ width: `${taskProgress.progress}%` }}
-                ></div>
-              </div>
-            </div>
+            {/* 実際のタスクデータから進捗状況を判定 */}
+            {(() => {
+              const actualProgress = taskData?.progress !== undefined ? taskData.progress as number : (taskProgress?.progress || 0)
+              const actualPhase = taskData?.currentPhase || taskProgress?.phase || 'search'
+              
+              // デバッグ情報をログ出力
+              console.log('🔍 Complete check - actualProgress:', actualProgress)
+              console.log('🔍 Complete check - actualPhase:', actualPhase)
+              console.log('🔍 Complete check - taskData:', taskData)
+              console.log('🔍 Complete check - taskData.status:', taskData?.status)
+              
+              // より確実な完了判定ロジック
+              const taskStatus = taskData?.status as {state: string} | undefined
+              const statusCompleted = taskStatus?.state === 'completed'
+              const progressCompleted = actualProgress === 100
+              const phaseCompleted = actualPhase === 'completed'
+              
+              console.log('🔍 Complete check - taskStatus.state:', taskStatus?.state)
+              console.log('🔍 Complete check - statusCompleted:', statusCompleted)
+              console.log('🔍 Complete check - progressCompleted:', progressCompleted)
+              console.log('🔍 Complete check - phaseCompleted:', phaseCompleted)
+              
+              // Deep Researchタスクが完了しているかを複数の条件で確認
+              const isCompleted = statusCompleted || progressCompleted || phaseCompleted
+              console.log('🔍 Complete check - isCompleted:', isCompleted)
+              
+              if (isCompleted) {
+                return (
+                  <div className="p-3 bg-green-50 rounded-md">
+                    <div className="flex items-center gap-2 text-sm text-green-700 mb-2">
+                      <CheckCircle2 className="h-4 w-4" />
+                      <span className="font-medium">Deep Research完了! (100%)</span>
+                    </div>
+                    <div className="text-xs text-green-600">
+                      全ての調査フェーズが完了しました
+                    </div>
+                    <div className="w-full bg-green-200 rounded-full h-2 mt-2">
+                      <div className="bg-green-600 h-2 rounded-full w-full"></div>
+                    </div>
+                  </div>
+                )
+              } else {
+                return (
+                  <div className="p-3 bg-blue-50 rounded-md">
+                    <div className="flex items-center gap-2 text-sm text-blue-700 mb-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span className="font-medium">Deep Research実行中... ({actualProgress}%)</span>
+                    </div>
+                    <div className="text-xs text-blue-600">
+                      現在のフェーズ: {actualPhase === 'search' ? 'Web検索' : 
+                                    actualPhase === 'analyze' ? 'データ分析' :
+                                    actualPhase === 'synthesize' ? '結果統合' : 
+                                    actualPhase === 'completed' ? '完了' : String(actualPhase)}
+                    </div>
+                    <div className="w-full bg-blue-200 rounded-full h-2 mt-2">
+                      <div 
+                        className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
+                        style={{ width: `${actualProgress}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                )
+              }
+            })()}
             
             <div className="p-3 bg-gray-50 rounded-md">
               <div className="text-xs text-gray-600 space-y-1">

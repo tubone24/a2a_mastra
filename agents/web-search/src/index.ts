@@ -3,7 +3,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { initialize } from './mastra/index.js';
-import { createA2ARoutes } from './routes/a2aRoutes.js';
+import { a2aRoutes } from './routes/a2aRoutes.js';
 import { apiRoutes } from './routes/apiRoutes.js';
 import { langfuse } from './mastra/workflows/searchTaskProcessor.js';
 
@@ -44,8 +44,8 @@ async function startServer() {
     // Initialize MCP client and agent
     const { mastra, webSearchAgent, mcpTools } = await initialize();
     
-    // Mount routes - pass webSearchAgent to a2aRoutes
-    app.use('/api/a2a', createA2ARoutes(webSearchAgent));
+    // Mount routes
+    app.use('/api/a2a', a2aRoutes);
     app.use('/api', apiRoutes);
     app.use('/', apiRoutes); // Mount at root for health check
     

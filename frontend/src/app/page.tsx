@@ -72,34 +72,87 @@ export default function HomePage() {
         const res = await fetch(`/api/a2a/task/${taskId}`);
         if (res.ok) {
           const taskData = await res.json();
+          console.log('📊 Polling taskData received:', taskData);
           
-          // 進捗情報を更新
-          if (taskData.progress !== undefined) {
+          // 新しいA2A形式に対応
+          let status, progress, currentPhase, result;
+          
+          if (taskData.task) {
+            // 新しいA2A形式
+            status = taskData.task.status?.state;
+            
+            // artifactsから進捗情報を抽出
+            const workflowArtifact = taskData.task.artifacts?.find((artifact: { type: string; metadata?: { progress?: number; currentPhase?: string }; data?: unknown }) => artifact.type === 'workflow-result');
+            if (workflowArtifact?.metadata) {
+              progress = workflowArtifact.metadata.progress;
+              currentPhase = workflowArtifact.metadata.currentPhase;
+            }
+            result = workflowArtifact?.data;
+          } else {
+            // 従来形式のフォールバック
+            status = taskData.status;
+            progress = taskData.progress;
+            currentPhase = taskData.currentPhase;
+            result = taskData.result;
+          }
+          
+          console.log('📊 Extracted status:', status, 'progress:', progress, 'phase:', currentPhase);
+          
+          // 進捗情報を更新 - 新旧両形式に対応
+          if (progress !== undefined || currentPhase !== undefined) {
             setTaskProgress({
-              progress: taskData.progress,
-              phase: taskData.currentPhase || 'processing'
+              progress: progress !== undefined ? progress : (taskProgress?.progress || 0),
+              phase: currentPhase || taskProgress?.phase || 'search'
             });
+          } else if (status === 'working' && taskData.task?.status?.message?.parts?.[0]?.text) {
+            // メッセージから進捗情報を抽出 (フォールバック)
+            const messageText = taskData.task.status.message.parts[0].text;
+            const progressMatch = messageText.match(/(\d+)%/);
+            
+            // 日本語と英語のフェーズ名に対応
+            const phaseMatch = messageText.match(/(search|analyze|synthesize|Web検索|データ分析|結果統合)/);
+            
+            if (progressMatch || phaseMatch) {
+              let mappedPhase = phaseMatch ? phaseMatch[1] : (taskProgress?.phase || 'search');
+              
+              // 日本語フェーズ名を英語にマップ
+              const phaseMap: Record<string, string> = {
+                'Web検索フェーズ': 'search',
+                'Web検索': 'search',
+                'データ分析フェーズ': 'analyze', 
+                'データ分析': 'analyze',
+                '結果統合フェーズ': 'synthesize',
+                '結果統合': 'synthesize'
+              };
+              mappedPhase = phaseMap[mappedPhase] || mappedPhase;
+              
+              setTaskProgress({
+                progress: progressMatch ? parseInt(progressMatch[1]) : (taskProgress?.progress || 0),
+                phase: mappedPhase
+              });
+            }
           }
 
-          if (taskData.status === 'completed') {
+          if (status === 'completed') {
+            console.log('✅ Task completed - updating response and stopping polling');
             // 完了時の応答形式を既存のAPIResponseに合わせる
             setResponse({
               status: 'success',
               type: 'deep-research',
-              result: taskData.result,
+              result: result,
               metadata: {
-                completedAt: taskData.completedAt || new Date().toISOString(),
+                completedAt: new Date().toISOString(),
                 gateway: 'gateway-agent',
-                traceId: taskData.metadata?.traceId,
-                workflowExecutionId: taskData.workflowExecutionId,
+                traceId: taskData.task?.id || taskId,
+                workflowExecutionId: taskData.task?.id || taskId,
               }
             });
             setLoading(false);
             setTaskProgress(null);
             setCurrentTaskId(null);
             return;
-          } else if (taskData.status === 'failed') {
-            setError(`Deep Research failed: ${taskData.error || 'Unknown error'}`);
+          } else if (status === 'failed') {
+            setError(`Deep Research failed: ${taskData.task?.status?.message?.parts?.[0]?.text || 'Unknown error'}`);
             setLoading(false);
             setTaskProgress(null);
             setCurrentTaskId(null);
@@ -671,7 +724,7 @@ export default function HomePage() {
 
               <div className="lg:col-span-1">
                 <A2AVisualization
-                  isActive={loading || Boolean(response)}
+                  isActive={loading || Boolean(currentTaskId)}
                   taskType={loading ? form.getValues('type') : (response ? response.type as 'process' | 'summarize' | 'analyze' | 'web-search' | 'news-search' | 'scholarly-search' | 'deep-research' : null)}
                   workflowExecutionId={response?.metadata?.workflowExecutionId}
                   taskId={currentTaskId || undefined}

@@ -1,7 +1,7 @@
 export interface AsyncTask {
   id: string;
   type: string;
-  status: 'initiated' | 'working' | 'completed' | 'failed';
+  status: 'initiated' | 'working' | 'completed' | 'failed' | 'cancelled';
   progress: number;
   currentPhase: string;
   phases: string[];
