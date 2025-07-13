@@ -2,7 +2,7 @@
 
 A demonstration of Agent-to-Agent (A2A) communication protocol using the Mastra framework, featuring multiple specialized AI agents powered by Amazon Bedrock. This project showcases how autonomous agents can communicate, collaborate, and delegate tasks to achieve complex goals.
 
-**Current Implementation**: All agents are now built with Mastra's standard A2A protocol using Mastra Dev Server, providing unified and consistent agent-to-agent communication across the entire system.
+**Current Implementation**: The system uses a hybrid architecture where Gateway, Data Processor, and Summarizer agents run on Express servers with custom A2A implementation, while Web Search agent has been migrated to Mastra Dev Server with native A2A protocol.
 
 ![demo](./docs/images/demo.gif)
 
@@ -16,7 +16,7 @@ The system consists of four specialized agents that communicate via the A2A prot
 4. **Web Search Agent** - Real-time web information retrieval
 
 ### Technology Stack
-- **Framework**: Mastra Framework - All agents use Mastra Dev Server with native A2A protocol
+- **Framework**: Hybrid Architecture - Gateway, Data Processor, Summarizer (Express Server + Custom A2A) + Web Search (Mastra Dev Server)
 - **LLM**: Amazon Bedrock Claude 3.5 Sonnet
 - **Language**: TypeScript
 - **Frontend**: Next.js
@@ -28,52 +28,48 @@ The system consists of four specialized agents that communicate via the A2A prot
 
 ```mermaid
 graph TB
-    subgraph "Mastra Dev Server Agents"
-        subgraph "Gateway Agent (Mastra Dev Server)"
-            subgraph "Mastra Native Stack - Gateway"
-                GW_MASTRA_DEV[Mastra Dev Server<br/>Port: 3001]
-                GW_MASTRA_HONO[Built-in Hono Server]
+    subgraph "Express Server Agents"
+        subgraph "Gateway Agent (Express Server)"
+            subgraph "Express + Custom A2A - Gateway"
+                GW_EXPRESS[Express Server<br/>Port: 3001]
+                GW_ROUTES[Express Routes<br/>/api/a2a/*]
                 GW_MASTRA_AGENT[Gateway Agent]
-                GW_MASTRA_A2A[Native A2A Protocol]
-                GW_MASTRA_STORAGE[In-Memory Storage<br/>LibSQL]
+                GW_CUSTOM_A2A[Custom A2A Client]
             end
             
-            GW_MASTRA_DEV --> GW_MASTRA_HONO
-            GW_MASTRA_HONO --> GW_MASTRA_AGENT
-            GW_MASTRA_AGENT --> GW_MASTRA_A2A
-            GW_MASTRA_DEV --> GW_MASTRA_STORAGE
+            GW_EXPRESS --> GW_ROUTES
+            GW_ROUTES --> GW_MASTRA_AGENT
+            GW_MASTRA_AGENT --> GW_CUSTOM_A2A
         end
         
-        subgraph "Data Processor Agent (Mastra Dev Server)"
-            subgraph "Mastra Native Stack - Data Processor"
-                DP_MASTRA_DEV[Mastra Dev Server<br/>Port: 3002]
-                DP_MASTRA_HONO[Built-in Hono Server]
-                DP_MASTRA_AGENT[Data Processor Agent]
-                DP_MASTRA_A2A[Native A2A Protocol]
-                DP_MASTRA_STORAGE[In-Memory Storage<br/>LibSQL]
+        subgraph "Data Processor Agent (Express Server)"
+            subgraph "Express + Custom A2A - Data Processor"
+                DP_EXPRESS[Express Server<br/>Port: 3002]
+                DP_ROUTES[Express Routes<br/>/api/a2a/*]
+                DP_AGENT[Data Processor Agent]
+                DP_CUSTOM_A2A[Custom A2A Protocol]
             end
             
-            DP_MASTRA_DEV --> DP_MASTRA_HONO
-            DP_MASTRA_HONO --> DP_MASTRA_AGENT
-            DP_MASTRA_AGENT --> DP_MASTRA_A2A
-            DP_MASTRA_DEV --> DP_MASTRA_STORAGE
+            DP_EXPRESS --> DP_ROUTES
+            DP_ROUTES --> DP_AGENT
+            DP_AGENT --> DP_CUSTOM_A2A
         end
         
-        subgraph "Summarizer Agent (Mastra Dev Server)"
-            subgraph "Mastra Native Stack - Summarizer"
-                SM_MASTRA_DEV[Mastra Dev Server<br/>Port: 3003]
-                SM_MASTRA_HONO[Built-in Hono Server]
-                SM_MASTRA_AGENT[Summarizer Agent]
-                SM_MASTRA_A2A[Native A2A Protocol]
-                SM_MASTRA_STORAGE[In-Memory Storage<br/>LibSQL]
+        subgraph "Summarizer Agent (Express Server)"
+            subgraph "Express + Custom A2A - Summarizer"
+                SM_EXPRESS[Express Server<br/>Port: 3003]
+                SM_ROUTES[Express Routes<br/>/api/a2a/*]
+                SM_AGENT[Summarizer Agent]
+                SM_CUSTOM_A2A[Custom A2A Protocol]
             end
             
-            SM_MASTRA_DEV --> SM_MASTRA_HONO
-            SM_MASTRA_HONO --> SM_MASTRA_AGENT
-            SM_MASTRA_AGENT --> SM_MASTRA_A2A
-            SM_MASTRA_DEV --> SM_MASTRA_STORAGE
+            SM_EXPRESS --> SM_ROUTES
+            SM_ROUTES --> SM_AGENT
+            SM_AGENT --> SM_CUSTOM_A2A
         end
-        
+    end
+    
+    subgraph "Mastra Dev Server Agent"
         subgraph "Web Search Agent (Mastra Dev Server)"
             subgraph "Mastra Native Stack - Web Search"
                 WS_MASTRA_DEV[Mastra Dev Server<br/>Port: 3004]
@@ -99,36 +95,33 @@ graph TB
         MCP[MCP Server<br/>Web Search Tools]
     end
     
-    GW_MASTRA_A2A <-->|Mastra A2A Protocol| DP_MASTRA_A2A
-    GW_MASTRA_A2A <-->|Mastra A2A Protocol| SM_MASTRA_A2A
-    GW_MASTRA_A2A <-->|Mastra A2A Protocol| WS_MASTRA_A2A
+    GW_CUSTOM_A2A <-->|Custom A2A Protocol| DP_CUSTOM_A2A
+    GW_CUSTOM_A2A <-->|Custom A2A Protocol| SM_CUSTOM_A2A
+    GW_CUSTOM_A2A <-->|Native A2A Protocol| WS_MASTRA_A2A
     
-    DP_MASTRA_AGENT --> BEDROCK
-    SM_MASTRA_AGENT --> BEDROCK
+    DP_AGENT --> BEDROCK
+    SM_AGENT --> BEDROCK
     GW_MASTRA_AGENT --> BEDROCK
     WS_MASTRA_AGENT --> BEDROCK
     WS_MCP_INTEGRATION --> MCP
     MCP --> BRAVE
     
     GW_MASTRA_AGENT -.->|Traces| LANGFUSE
-    DP_MASTRA_AGENT -.->|Traces| LANGFUSE
-    SM_MASTRA_AGENT -.->|Traces| LANGFUSE
+    DP_AGENT -.->|Traces| LANGFUSE
+    SM_AGENT -.->|Traces| LANGFUSE
     WS_MASTRA_AGENT -.->|Traces| LANGFUSE
     
-    style GW_MASTRA_DEV fill:#e8f5e8
-    style DP_MASTRA_DEV fill:#e8f5e8
-    style SM_MASTRA_DEV fill:#e8f5e8
+    style GW_EXPRESS fill:#e3f2fd
+    style DP_EXPRESS fill:#e3f2fd
+    style SM_EXPRESS fill:#e3f2fd
     style WS_MASTRA_DEV fill:#e8f5e8
-    style GW_MASTRA_STORAGE fill:#fff3e0
-    style DP_MASTRA_STORAGE fill:#fff3e0
-    style SM_MASTRA_STORAGE fill:#fff3e0
     style WS_MASTRA_STORAGE fill:#fff3e0
 ```
 
 **Architecture Features:**
-- **Unified Implementation**: All agents use Mastra Dev Server with native A2A protocol
-- **Consistent Communication**: Standard Mastra A2A protocol across all agent interactions
-- **Native Integration**: Built-in Hono server and LibSQL storage for each agent
+- **Hybrid Implementation**: Gateway, Data Processor, Summarizer use Express with custom A2A, Web Search uses Mastra Dev Server
+- **Mixed Communication Protocols**: Custom A2A protocol for Express agents, native Mastra A2A for Web Search
+- **Selective Native Integration**: Only Web Search agent uses built-in Hono server and LibSQL storage
 - **MCP Support**: Web Search agent integrates MCP protocol for external tool access
 
 ### Simplified System Architecture
@@ -139,10 +132,10 @@ graph TB
         UI[Next.js Frontend<br/>Port: 3000]
     end
     
-    subgraph "Agent Layer - All Mastra Dev Server"
-        GW[Gateway Agent<br/>Mastra Dev Server<br/>Port: 3001]
-        DP[Data Processor<br/>Mastra Dev Server<br/>Port: 3002]
-        SM[Summarizer Agent<br/>Mastra Dev Server<br/>Port: 3003]
+    subgraph "Agent Layer - Hybrid Architecture"
+        GW[Gateway Agent<br/>Express Server<br/>Port: 3001]
+        DP[Data Processor<br/>Express Server<br/>Port: 3002]
+        SM[Summarizer Agent<br/>Express Server<br/>Port: 3003]
         WS[Web Search Agent<br/>Mastra Dev Server<br/>Port: 3004]
     end
     
@@ -154,9 +147,9 @@ graph TB
     end
     
     UI -->|HTTP/REST| GW
-    GW <-->|Mastra A2A Protocol| DP
-    GW <-->|Mastra A2A Protocol| SM
-    GW <-->|Mastra A2A Protocol| WS
+    GW <-->|Custom A2A Protocol| DP
+    GW <-->|Custom A2A Protocol| SM
+    GW <-->|Native A2A Protocol| WS
     
     DP --> BEDROCK
     SM --> BEDROCK
@@ -171,16 +164,16 @@ graph TB
     WS -.->|Traces| LANGFUSE
     
     style UI fill:#e1f5fe
-    style GW fill:#e8f5e8
-    style DP fill:#e8f5e8
-    style SM fill:#e8f5e8
+    style GW fill:#e3f2fd
+    style DP fill:#e3f2fd
+    style SM fill:#e3f2fd
     style WS fill:#e8f5e8
 ```
 
 ## 🚀 Features
 
-- **Unified A2A Communication**: Standardized Mastra A2A protocol for all inter-agent messaging
-- **Native Mastra Architecture**: All agents use Mastra Dev Server with built-in Hono server
+- **Hybrid A2A Communication**: Custom A2A protocol for Express agents, native Mastra A2A for Web Search
+- **Mixed Architecture**: Express servers for Gateway/Data Processor/Summarizer, Mastra Dev Server for Web Search
 - **Workflow Orchestration**: Complex multi-step workflows with automatic task delegation
 - **Real-time Visualization**: Live visualization of agent communication flows
 - **Tracing & Observability**: Comprehensive tracing with Langfuse integration
@@ -364,7 +357,13 @@ sequenceDiagram
 
 The system implements unified Mastra A2A protocol across all agents:
 
-**For All Mastra Dev Server Agents (Gateway, Data Processor, Summarizer, Web Search):**
+**For Express Server Agents (Gateway, Data Processor, Summarizer):**
+1. **Custom A2A Discovery** - HTTP endpoint `/api/a2a/agent` for agent capability discovery
+2. **Custom Message Exchange** - HTTP POST `/api/a2a/message` for synchronous communication
+3. **Custom Task Management** - HTTP POST `/api/a2a/task` for asynchronous processing
+4. **Custom Task Streaming** - HTTP GET `/api/a2a/task/{id}` for task progress polling
+
+**For Mastra Dev Server Agent (Web Search):**
 1. **Agent Discovery** - `A2A.getAgentCard(agentId)` - Agent capability discovery
 2. **Message Exchange** - `A2A.sendMessage({to, from, content})` - Synchronous communication
 3. **Task Management** - `A2A.createTask({agentId, taskType, payload})` - Asynchronous processing
@@ -644,33 +643,39 @@ a2a-mastra-demo/
 
 ### Current Architecture
 
-All agent services are now implemented with unified Mastra architecture:
+Agent services use a hybrid architecture:
 
-**All Agents (Gateway, Data Processor, Summarizer, Web Search):**
+**Express Server Agents (Gateway, Data Processor, Summarizer):**
+- **Express Server**: Node.js-based server (started with `node dist/index.js`)
+- **Custom A2A Protocol**: Custom HTTP-based A2A communication protocol
+- **Custom Storage**: Application-specific data management
+- **Docker Container**: Isolated deployment of each service
+
+**Mastra Dev Server Agent (Web Search):**
 - **Mastra Dev Server**: Hono-based native server (started with `mastra dev`)
 - **Native A2A Protocol**: Mastra standard A2A communication protocol
 - **In-Memory Storage**: In-memory storage via LibSQL
-- **Docker Container**: Isolated deployment of each service
+- **Docker Container**: Isolated deployment with MCP integration
 
 ### Local Development
 
-Each agent can be developed independently using Mastra Dev Server:
+Each agent can be developed independently:
 
 ```bash
-# Gateway Agent (Mastra Dev Server)
+# Gateway Agent (Express Server)
 cd agents/gateway
 npm install
-npm run start    # mastra dev
+npm run start    # node dist/index.js
 
-# Data Processor (Mastra Dev Server)
+# Data Processor (Express Server)
 cd agents/data-processor
 npm install
-npm run start    # mastra dev
+npm run start    # node dist/index.js
 
-# Summarizer Agent (Mastra Dev Server)
+# Summarizer Agent (Express Server)
 cd agents/summarizer
 npm install
-npm run start    # mastra dev
+npm run start    # node dist/index.js
 
 # Web Search Agent (Mastra Dev Server)
 cd agents/web-search
@@ -680,18 +685,19 @@ npm run start    # mastra dev
 
 ### Architecture Benefits
 
-With the migration to full Mastra architecture:
+With the partial migration to Mastra architecture:
 
 **Achieved Benefits:**
-- **Unified A2A Protocol**: All agents use the same native A2A communication
-- **Consistent Development Experience**: All agents use `mastra dev` command
-- **Built-in Features**: Native Hono server, LibSQL storage, and A2A protocol
-- **Simplified Deployment**: Consistent Docker container setup across all agents
+- **Web Search Modernization**: Web Search agent now uses native Mastra A2A and MCP integration
+- **Hybrid Flexibility**: Mix of Express and Mastra architectures for different requirements
+- **MCP Protocol Support**: Advanced web search capabilities through Model Context Protocol
+- **Containerized Deployment**: Consistent Docker container setup across all agents
 
 **Future Enhancement Options:**
-- **Production Storage**: Migrate from in-memory LibSQL to production-ready backends (PostgreSQL, Redis)
+- **Complete Mastra Migration**: Migrate remaining Express agents to Mastra Dev Server
+- **Unified A2A Protocol**: Standardize on native Mastra A2A for all agents
+- **Production Storage**: Migrate to production-ready storage backends
 - **Horizontal Scaling**: Implement multi-instance agent deployment
-- **Custom API Routes**: Add additional HTTP endpoints via Mastra `registerApiRoute`
 
 ## 🔍 Monitoring & Debugging
 
