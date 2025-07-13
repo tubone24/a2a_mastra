@@ -2,13 +2,13 @@
 
 A demonstration of Agent-to-Agent (A2A) communication protocol using the Mastra framework, featuring multiple specialized AI agents powered by Amazon Bedrock. This project showcases how autonomous agents can communicate, collaborate, and delegate tasks to achieve complex goals.
 
-**Current Implementation**: The system uses a hybrid architecture where Gateway agent runs on Express server with REST API implementation, while Data Processor, Summarizer, and Web Search agents use Mastra Dev Server with native A2A protocol.
+The system uses a hybrid architecture where Gateway agent(A2A Client Agent) runs on Express server with REST API implementation, while Data Processor, Summarizer, and Web Search agents use Mastra Dev Server with native A2A protocol.
 
 ![demo](./docs/images/demo.gif)
 
 ## 🏗️ Architecture Overview
 
-The system consists of four specialized agents that communicate via the A2A protocol:
+The system consists of four specialized agents that communicate via the A2A protocol
 
 1. **Gateway Agent** - Request routing and workflow orchestration(A2A Client Agent)
 2. **Data Processor Agent** - Data analysis and transformation(A2A Remote Agent)
