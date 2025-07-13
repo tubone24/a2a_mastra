@@ -237,11 +237,27 @@ router.post('/', async (req, res) => {
           try {
             updateWorkflowStep(workflowExecution.id, step1.id, { status: 'in_progress' });
             
-            processResult = await sendA2AMessage('data-processor', {
+            const processResponse = await sendA2AMessage('data-processor', {
               type: 'analyze',
               data: validatedRequest.data || {},
               context: validatedRequest.context,
             });
+            
+            // Extract text from A2A response
+            if (typeof processResponse === 'string') {
+              processResult = processResponse;
+            } else {
+              const taskPart = processResponse.task?.status?.message?.parts?.[0];
+              const messagePart = processResponse.message?.parts?.[0];
+              
+              if (taskPart && 'text' in taskPart) {
+                processResult = taskPart.text;
+              } else if (messagePart && 'text' in messagePart) {
+                processResult = messagePart.text;
+              } else {
+                processResult = processResponse;
+              }
+            }
             
             updateWorkflowStep(workflowExecution.id, step1.id, { 
               status: 'completed', 
@@ -289,7 +305,7 @@ router.post('/', async (req, res) => {
           try {
             updateWorkflowStep(workflowExecution.id, step2.id, { status: 'in_progress' });
             
-            summaryResult = await sendA2AMessage('summarizer', {
+            const summaryResponse = await sendA2AMessage('summarizer', {
               type: 'executive-summary',
               data: processResult,
               context: {
@@ -299,6 +315,22 @@ router.post('/', async (req, res) => {
               },
               audienceType: validatedRequest.audienceType || 'executive',
             });
+            
+            // Extract text from A2A response
+            if (typeof summaryResponse === 'string') {
+              summaryResult = summaryResponse;
+            } else {
+              const taskPart = summaryResponse.task?.status?.message?.parts?.[0];
+              const messagePart = summaryResponse.message?.parts?.[0];
+              
+              if (taskPart && 'text' in taskPart) {
+                summaryResult = taskPart.text;
+              } else if (messagePart && 'text' in messagePart) {
+                summaryResult = messagePart.text;
+              } else {
+                summaryResult = summaryResponse;
+              }
+            }
             
             updateWorkflowStep(workflowExecution.id, step2.id, { 
               status: 'completed', 

@@ -13,7 +13,8 @@ const summarizeTool = createTool({
   execute: async (context): Promise<any> => {
     const taskId = crypto.randomUUID();
     const result: any = await processSummarizationTask(context, taskId);
-    return result;
+    // Return the task structure for A2A compatibility
+    return result.task;
   },
 });
 

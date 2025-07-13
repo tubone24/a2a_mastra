@@ -16,7 +16,7 @@ The system consists of four specialized agents that communicate via the A2A prot
 4. **Web Search Agent** - Real-time web information retrieval
 
 ### Technology Stack
-- **Framework**: Hybrid Mastra (A2A communication) + Express (HTTP server)
+- **Framework**: Hybrid Architecture - Data Processor (Mastra Dev Server) + Other Agents (Express Server)
 - **LLM**: Amazon Bedrock Claude 3.5 Sonnet
 - **Language**: TypeScript
 - **Frontend**: Next.js
@@ -28,24 +28,46 @@ The system consists of four specialized agents that communicate via the A2A prot
 
 ```mermaid
 graph TB
-    subgraph "Agent Container"
-        subgraph "Express Layer"
-            EXPRESS[Express HTTP Server<br/>Port: 300x]
-            ROUTES[Express Routes<br/>/api/a2a/*<br/>/api/*]
+    subgraph "Data Processor Agent (Mastra Dev Server)"
+        subgraph "Mastra Native Stack"
+            MASTRA_DEV[Mastra Dev Server<br/>Port: 3002]
+            MASTRA_HONO[Built-in Hono Server]
+            MASTRA_AGENT[Data Processor Agent]
+            MASTRA_A2A[Native A2A Protocol]
+            MASTRA_STORAGE[In-Memory Storage<br/>LibSQL]
         end
         
-        subgraph "Mastra Layer"
-            MASTRA[Mastra Instance]
-            AGENT[Agent Definition]
-            WORKFLOW[Workflows]
-            A2A[A2A Protocol Handler]
+        MASTRA_DEV --> MASTRA_HONO
+        MASTRA_HONO --> MASTRA_AGENT
+        MASTRA_AGENT --> MASTRA_A2A
+        MASTRA_DEV --> MASTRA_STORAGE
+    end
+    
+    subgraph "Other Agents (Express Servers)"
+        subgraph "Gateway Agent"
+            GW_EXPRESS[Express Server<br/>Port: 3001]
+            GW_ROUTES[A2A Routes<br/>/api/a2a/*]
+            GW_MASTRA[Mastra Instance]
         end
         
-        EXPRESS --> ROUTES
-        ROUTES --> MASTRA
-        MASTRA --> AGENT
-        MASTRA --> WORKFLOW
-        MASTRA --> A2A
+        subgraph "Summarizer Agent"
+            SM_EXPRESS[Express Server<br/>Port: 3003]
+            SM_ROUTES[A2A Routes<br/>/api/a2a/*]
+            SM_MASTRA[Mastra Instance]
+        end
+        
+        subgraph "Web Search Agent"
+            WS_EXPRESS[Express Server<br/>Port: 3004]
+            WS_ROUTES[A2A Routes<br/>/api/a2a/*]
+            WS_MASTRA[Mastra Instance]
+        end
+        
+        GW_EXPRESS --> GW_ROUTES
+        GW_ROUTES --> GW_MASTRA
+        SM_EXPRESS --> SM_ROUTES
+        SM_ROUTES --> SM_MASTRA
+        WS_EXPRESS --> WS_ROUTES
+        WS_ROUTES --> WS_MASTRA
     end
     
     subgraph "External Services"
@@ -55,20 +77,41 @@ graph TB
         MCP[MCP Server<br/>Web Search Tools]
     end
     
-    AGENT --> BEDROCK
-    WORKFLOW --> LANGFUSE
-    A2A -.->|Future Migration| HONO[Mastra Native<br/>Hono Server]
+    GW_MASTRA -->|HTTP A2A| MASTRA_A2A
+    SM_MASTRA -->|HTTP A2A| MASTRA_A2A
+    WS_MASTRA -->|HTTP A2A| MASTRA_A2A
     
-    style EXPRESS fill:#e3f2fd
-    style MASTRA fill:#fff3e0
-    style AGENT fill:#f3e5f5
-    style HONO fill:#e8f5e8,stroke:#4caf50,stroke-dasharray: 5 5
+    MASTRA_AGENT --> BEDROCK
+    GW_MASTRA --> BEDROCK
+    SM_MASTRA --> BEDROCK
+    WS_MASTRA --> BEDROCK
+    WS_MASTRA --> BRAVE
+    
+    style MASTRA_DEV fill:#e8f5e8
+    style GW_EXPRESS fill:#e3f2fd
+    style SM_EXPRESS fill:#e3f2fd
+    style WS_EXPRESS fill:#e3f2fd
+    style MASTRA_STORAGE fill:#fff3e0
 ```
 
-Each agent service follows this hybrid pattern:
-- **Express Server**: Handles HTTP requests, CORS, middleware
-- **Mastra Instance**: Manages agent logic, workflows, and inter-agent communication
-- **Future State**: Migration to Mastra's native Hono-based server
+**アーキテクチャの特徴:**
+- **Data Processor**: Mastra標準のDev Server（Hono）でA2A通信ネイティブサポート
+- **Other Agents**: Express Server + 独自A2A実装によるHTTP通信
+- **通信方式**: Data ProcessorはMastraネイティブA2A、他エージェントは独自Express実装
+
+### Mastra標準A2Aで実現できなかった制約
+
+このプロジェクトでは、Data Processor以外のエージェント（Gateway、Summarizer、Web Search）でExpressサーバーによる独自A2A実装を採用しています。これは、Mastra標準のDev ServerのA2A機能では以下の制約があったためです：
+
+1. **Single Agent Per Instance制約**: Mastra Dev Serverは基本的に1つのエージェントインスタンス用に設計されており、複数エージェント間でのネットワーク分散通信に課題があった
+
+2. **In-Memory Storage制限**: LibSQLによるメモリ内ストレージのため、エージェント間での永続的なタスク状態管理や長時間実行ワークフローの継続性に制限があった
+
+3. **Production Deployment制約**: Mastra Dev Serverは主にローカル開発環境用で、Docker化された本番環境での複数コンテナ間通信には制約があった
+
+4. **Custom Middleware Support**: CORS設定、独自認証、カスタムルーティングなど、本番環境で必要な柔軟なHTTPミドルウェア設定が困難だった
+
+これらの制約により、Gateway、Summarizer、Web SearchエージェントではExpressサーバーによる独自A2A実装を採用し、Data Processorのみが実験的にMastra標準のA2A機能を使用する混合アーキテクチャとなっています。
 
 ### System Architecture
 
@@ -79,10 +122,10 @@ graph TB
     end
     
     subgraph "Agent Layer"
-        GW[Gateway Agent<br/>Port: 3001]
-        DP[Data Processor<br/>Port: 3002]
-        SM[Summarizer<br/>Port: 3003]
-        WS[Web Search<br/>Port: 3004]
+        GW[Gateway Agent<br/>(Express Server)<br/>Port: 3001]
+        DP[Data Processor<br/>(Mastra Dev Server)<br/>Port: 3002]
+        SM[Summarizer Agent<br/>(Express Server)<br/>Port: 3003]
+        WS[Web Search Agent<br/>(Express Server)<br/>Port: 3004]
     end
     
     subgraph "External Services"
@@ -92,9 +135,9 @@ graph TB
     end
     
     UI -->|HTTP/REST| GW
-    GW -->|A2A Protocol| DP
-    GW -->|A2A Protocol| SM
-    GW -->|A2A Protocol| WS
+    GW -->|Express A2A Implementation| DP
+    GW -->|Express A2A Implementation| SM
+    GW -->|Express A2A Implementation| WS
     
     DP --> BEDROCK
     SM --> BEDROCK
@@ -107,10 +150,10 @@ graph TB
     WS -.->|Traces| LANGFUSE
     
     style UI fill:#e1f5fe
-    style GW fill:#fff3e0
-    style DP fill:#f3e5f5
-    style SM fill:#e8f5e9
-    style WS fill:#fce4ec
+    style GW fill:#e3f2fd
+    style DP fill:#e8f5e8
+    style SM fill:#e3f2fd
+    style WS fill:#e3f2fd
 ```
 
 ## 🚀 Features
@@ -487,35 +530,60 @@ a2a-mastra-demo/
 
 ### Current Architecture
 
-Each agent service runs as a hybrid Express + Mastra application:
-- **Express Server**: Handles HTTP requests and API routing
-- **Mastra Instance**: Manages agent definitions, workflows, and A2A communication
-- **Docker Container**: Isolated service deployment
+エージェントサービスは混合アーキテクチャで実装されています：
+
+**Data Processor Agent:**
+- **Mastra Dev Server**: Honoベースのネイティブサーバー（`mastra dev`で起動）
+- **Built-in A2A Protocol**: Mastra標準のA2A通信プロトコル
+- **In-Memory Storage**: LibSQLによるメモリ内ストレージ
+
+**Other Agents (Gateway, Summarizer, Web Search):**
+- **Express Server**: HTTPリクエスト処理とAPIルーティング
+- **Mastra Instance**: エージェント定義、ワークフロー、独自A2A通信実装
+- **Custom A2A Implementation**: Express経由の独自A2A実装
+
+**Deployment:**
+- **Docker Container**: 各サービスの分離デプロイメント
 
 ### Local Development
 
-Each agent can be run independently for development:
+各エージェントは独立して開発できます：
 
 ```bash
-# Gateway Agent
+# Data Processor (Mastra Dev Server)
+cd agents/data-processor
+npm install
+npm run dev:mastra
+
+# Gateway Agent (Express Server)
 cd agents/gateway
 npm install
 npm run dev
 
-# Data Processor
-cd agents/data-processor
+# Summarizer Agent (Express Server)
+cd agents/summarizer
 npm install
 npm run dev
 
-# Continue for other agents...
+# Web Search Agent (Express Server)
+cd agents/web-search
+npm install
+npm run dev
 ```
 
 ### Migration Notes
 
-The project is currently in a hybrid state and can be migrated to pure Mastra:
+プロジェクトは現在、混合アーキテクチャ状態にあり、将来的にはMastra完全対応への移行が可能です：
+
+**現在の状況:**
+- Data Processor: Mastra標準A2A（実験的実装）
+- Other Agents: Express + 独自A2A実装
+
+**将来の移行オプション:**
 - Express routes → Mastra `registerApiRoute`
-- Express server → Mastra's built-in Hono server
-- Manual HTTP handling → Mastra's native A2A protocol
+- Express server → Mastra built-in Hono server  
+- Custom A2A implementation → Mastra native A2A protocol
+- In-memory storage → Production-ready storage backends (PostgreSQL, Redis)
 
 ## 🔍 Monitoring & Debugging
 

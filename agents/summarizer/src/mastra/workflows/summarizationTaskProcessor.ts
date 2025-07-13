@@ -253,17 +253,21 @@ export async function processSummarizationTask(task: any, taskId: string, parent
     });
     
     summaryResult = {
-      status: 'completed',
-      processedBy: AGENT_ID,
-      summary: result.text,
-      metadata: {
-        completedAt: new Date().toISOString(),
-        summaryType: validatedTask.type,
-        audienceType,
-        originalDataSize: JSON.stringify(validatedTask.data).length,
-        summaryLength: result.text.length,
-        traceId: trace.id,
-      },
+      task: {
+        id: taskId,
+        status: {
+          state: 'completed',
+          timestamp: new Date().toISOString(),
+          message: {
+            role: 'agent',
+            parts: [{
+              type: 'text',
+              text: result.text
+            }]
+          }
+        },
+        artifacts: []
+      }
     };
     
     // Log successful completion
@@ -273,6 +277,10 @@ export async function processSummarizationTask(task: any, taskId: string, parent
         summaryLength: result.text.length,
         success: true,
         audienceType: audienceType,
+        processedBy: AGENT_ID,
+        summaryType: validatedTask.type,
+        originalDataSize: JSON.stringify(validatedTask.data).length,
+        traceId: trace.id,
       },
     });
     

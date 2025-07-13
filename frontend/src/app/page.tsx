@@ -32,12 +32,8 @@ interface ApiResponse {
   result: {
     workflow?: string
     steps?: {
-      processing: {
-        result: string | object
-      }
-      summary: {
-        summary: string | object
-      }
+      processing: string | object
+      summary: string | object
     }
     final_result?: object
   } | string | object
@@ -568,18 +564,18 @@ export default function HomePage() {
                                 <div>
                                   <h5 className="font-medium text-slate-700">データ処理結果:</h5>
                                   <pre className="mt-1 whitespace-pre-wrap text-sm text-slate-600">
-                                    {response.result.steps && typeof response.result.steps.processing.result === 'string'
-                                      ? response.result.steps.processing.result
-                                      : JSON.stringify(response.result.steps?.processing.result || '', null, 2)
+                                    {response.result.steps && typeof response.result.steps.processing === 'string'
+                                      ? response.result.steps.processing
+                                      : JSON.stringify(response.result.steps?.processing || '', null, 2)
                                     }
                                   </pre>
                                 </div>
                                 <div>
                                   <h5 className="font-medium text-slate-700">要約結果:</h5>
                                   <pre className="mt-1 whitespace-pre-wrap text-sm text-slate-600">
-                                    {response.result.steps && typeof response.result.steps.summary.summary === 'string'
-                                      ? response.result.steps.summary.summary
-                                      : JSON.stringify(response.result.steps?.summary.summary || '', null, 2)
+                                    {response.result.steps && typeof response.result.steps.summary === 'string'
+                                      ? response.result.steps.summary
+                                      : JSON.stringify(response.result.steps?.summary || '', null, 2)
                                     }
                                   </pre>
                                 </div>

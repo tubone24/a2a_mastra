@@ -2,6 +2,34 @@ import { asyncTasks, AsyncTask } from './asyncTaskManager.js';
 import { completeWorkflowExecution } from './workflowManager.js';
 import { sendA2AMessage, sendA2ATask, pollTaskStatus } from '../../utils/mastraA2AClient.js';
 
+// Helper function to extract key findings from synthesis result
+function extractKeyFindings(synthesisResult: any): string[] {
+  if (typeof synthesisResult === 'string') {
+    // Extract bullet points or numbered items from the text
+    const lines = synthesisResult.split('\n');
+    const findings = lines.filter((line: string) => 
+      line.trim().match(/^[\d•\-\*]\.|^[\d\.]+\s/) && 
+      (line.includes('発見') || line.includes('結果') || line.includes('重要'))
+    ).map((line: string) => line.trim());
+    return findings.slice(0, 5); // Return top 5 findings
+  }
+  return [];
+}
+
+// Helper function to extract recommendations from synthesis result
+function extractRecommendations(synthesisResult: any): string[] {
+  if (typeof synthesisResult === 'string') {
+    // Extract recommendations from the text
+    const lines = synthesisResult.split('\n');
+    const recommendations = lines.filter((line: string) => 
+      line.trim().match(/^[\d•\-\*]\.|^[\d\.]+\s/) && 
+      (line.includes('推奨') || line.includes('提案') || line.includes('改善'))
+    ).map((line: string) => line.trim());
+    return recommendations.slice(0, 5); // Return top 5 recommendations
+  }
+  return [];
+}
+
 export async function executeDeepResearchWorkflow(
   taskId: string,
   topic: string,
@@ -102,7 +130,7 @@ export async function executeDeepResearchWorkflow(
     console.log(`Deep Research Phase 3: Synthesizing comprehensive report`);
     
     // Phase 3: Synthesis and Report Generation using A2A Message
-    const synthesisResult = await sendA2AMessage('summarizer', {
+    const synthesisResponse = await sendA2AMessage('summarizer', {
       type: 'research-synthesis',
       data: {
         topic,
@@ -116,6 +144,15 @@ export async function executeDeepResearchWorkflow(
         includeSources: true,
       },
     });
+    
+    // Parse the synthesis result if it's a JSON string
+    let synthesisResult;
+    try {
+      synthesisResult = typeof synthesisResponse === 'string' ? JSON.parse(synthesisResponse) : synthesisResponse;
+    } catch (e) {
+      // If parsing fails, use the response as is
+      synthesisResult = { summary: synthesisResponse };
+    }
 
     // Update progress to 95%
     task.progress = 95;
@@ -125,14 +162,14 @@ export async function executeDeepResearchWorkflow(
     const finalResult = {
       topic,
       methodology: 'multi-agent-deep-research',
-      executiveSummary: synthesisResult.executiveSummary || synthesisResult.summary,
+      executiveSummary: synthesisResult.executiveSummary || synthesisResult.summary || synthesisResult,
       detailedFindings: {
         searchResults: searchResult,
         analysis: analysisResult,
         synthesis: synthesisResult,
       },
-      keyFindings: synthesisResult.keyFindings || [],
-      recommendations: synthesisResult.recommendations || [],
+      keyFindings: synthesisResult.keyFindings || extractKeyFindings(synthesisResult),
+      recommendations: synthesisResult.recommendations || extractRecommendations(synthesisResult),
       sources: searchResult.sources || [],
       confidence: 0.92,
       completedPhases: ['search', 'analyze', 'synthesize'],

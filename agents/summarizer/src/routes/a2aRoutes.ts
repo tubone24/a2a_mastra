@@ -40,40 +40,68 @@ router.post('/task', async (req, res) => {
     processSummarizationTask(req.body, taskId)
       .then((result: any) => {
         console.log(`${AGENT_NAME} completed summarization task`);
-        // Store task result
-        tasks.set(taskId, {
-          id: taskId,
-          status: { state: 'completed', message: 'Summarization completed successfully' },
-          result: result,
-          createdAt: new Date().toISOString(),
-          completedAt: new Date().toISOString(),
-        });
+        // Store task result in A2A format
+        tasks.set(taskId, result);
       })
       .catch((error: any) => {
         console.error(`${AGENT_NAME} task processing error:`, error);
         tasks.set(taskId, {
-          id: taskId,
-          status: { state: 'failed', message: error.message },
-          result: null,
-          createdAt: tasks.get(taskId)?.createdAt || new Date().toISOString(),
-          failedAt: new Date().toISOString(),
+          task: {
+            id: taskId,
+            status: {
+              state: 'failed',
+              timestamp: new Date().toISOString(),
+              message: {
+                role: 'agent',
+                parts: [{
+                  type: 'text',
+                  text: `エラーが発生しました: ${error.message}`
+                }]
+              }
+            },
+            artifacts: []
+          }
         });
       });
     
-    // Return task immediately with working status
+    // Return task immediately with working status in A2A format
     res.json({
-      id: taskId,
-      status: { state: 'working', message: 'Summarization task is being processed...' },
-      createdAt: new Date().toISOString(),
+      task: {
+        id: taskId,
+        status: {
+          state: 'working',
+          timestamp: new Date().toISOString(),
+          message: {
+            role: 'agent',
+            parts: [{
+              type: 'text',
+              text: '要約タスクを処理中です...'
+            }]
+          }
+        },
+        artifacts: []
+      }
     });
     
   } catch (error) {
     console.error(`${AGENT_NAME} task creation error:`, error);
     const taskId = req.body.id || crypto.randomUUID();
     res.status(500).json({
-      id: taskId,
-      status: { state: 'failed', message: error instanceof Error ? error.message : 'Unknown error' },
-      error: error instanceof Error ? error.message : 'Unknown error',
+      task: {
+        id: taskId,
+        status: {
+          state: 'failed',
+          timestamp: new Date().toISOString(),
+          message: {
+            role: 'agent',
+            parts: [{
+              type: 'text',
+              text: `タスク作成エラー: ${error instanceof Error ? error.message : 'Unknown error'}`
+            }]
+          }
+        },
+        artifacts: []
+      }
     });
   }
 });
@@ -127,38 +155,28 @@ router.post('/message', async (req, res) => {
         }, taskId);
       }
     } catch (error) {
+      // Return error in the expected A2A task format
       result = {
-        status: 'failed',
-        error: error instanceof Error ? error.message : 'Unknown error',
-        processedBy: AGENT_ID,
+        task: {
+          id: taskId,
+          status: {
+            state: 'failed',
+            timestamp: new Date().toISOString(),
+            message: {
+              role: 'agent',
+              parts: [{
+                type: 'text',
+                text: `エラーが発生しました: ${error instanceof Error ? error.message : 'Unknown error'}`
+              }]
+            }
+          },
+          artifacts: []
+        }
       };
     }
     
-    // Return A2A compliant response with task
-    const taskState = result?.status === 'completed' ? 'completed' : 'failed';
-    const taskMessage = result?.status === 'completed' ? 'Summarization completed successfully' : (result as any)?.error || 'Summarization failed';
-    
-    res.json({
-      id: crypto.randomUUID(),
-      from: AGENT_ID,
-      to: from,
-      message: {
-        role: "assistant",
-        parts: [{
-          type: "text",
-          text: JSON.stringify(result)
-        }]
-      },
-      task: {
-        id: taskId,
-        status: {
-          state: taskState,
-          message: taskMessage
-        },
-        result: result
-      },
-      timestamp: new Date().toISOString(),
-    });
+    // Return the task structure directly
+    res.json(result);
     
   } catch (error) {
     console.error(`${AGENT_NAME} message processing error:`, error);
@@ -173,36 +191,71 @@ router.post('/message', async (req, res) => {
 router.get('/task/:taskId', (req, res) => {
   const { taskId } = req.params;
   
-  const task = tasks.get(taskId);
-  if (!task) {
+  const taskResult = tasks.get(taskId);
+  if (!taskResult) {
     return res.status(404).json({
-      error: 'Task not found',
-      taskId
+      task: {
+        id: taskId,
+        status: {
+          state: 'failed',
+          timestamp: new Date().toISOString(),
+          message: {
+            role: 'agent',
+            parts: [{
+              type: 'text',
+              text: 'タスクが見つかりません'
+            }]
+          }
+        },
+        artifacts: []
+      }
     });
   }
   
-  res.json(task);
+  res.json(taskResult);
 });
 
 // A2A Cancel Task endpoint
 router.delete('/task/:taskId', (req, res) => {
   const { taskId } = req.params;
   
-  const task = tasks.get(taskId);
-  if (!task) {
+  const taskResult = tasks.get(taskId);
+  if (!taskResult) {
     return res.status(404).json({
-      error: 'Task not found',
-      taskId
+      task: {
+        id: taskId,
+        status: {
+          state: 'failed',
+          timestamp: new Date().toISOString(),
+          message: {
+            role: 'agent',
+            parts: [{
+              type: 'text',
+              text: 'タスクが見つかりません'
+            }]
+          }
+        },
+        artifacts: []
+      }
     });
   }
   
-  if (task.status.state === 'working') {
-    task.status = { state: 'cancelled', message: 'Task cancelled by request' };
-    task.cancelledAt = new Date().toISOString();
-    tasks.set(taskId, task);
+  if (taskResult.task && taskResult.task.status.state === 'working') {
+    taskResult.task.status = {
+      state: 'cancelled',
+      timestamp: new Date().toISOString(),
+      message: {
+        role: 'agent',
+        parts: [{
+          type: 'text',
+          text: 'リクエストによりタスクがキャンセルされました'
+        }]
+      }
+    };
+    tasks.set(taskId, taskResult);
   }
   
-  res.json(task);
+  res.json(taskResult);
 });
 
 // Agent Card endpoint (A2A discovery)

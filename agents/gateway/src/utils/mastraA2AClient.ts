@@ -73,6 +73,13 @@ export async function sendA2AMessage(agentType: 'data-processor' | 'summarizer' 
     
     console.log(`A2A response from ${agentType}:`, JSON.stringify(response, null, 2));
     
+    // Extract text from response if it's in the A2A task format
+    const firstPart = response.task?.status?.message?.parts?.[0];
+    if (firstPart && 'text' in firstPart) {
+      console.log(`Extracting text from A2A response for ${agentType}`);
+      return firstPart.text;
+    }
+    
     return response;
   } catch (error) {
     console.error(`Failed to send A2A message to ${agentType}:`, error);
@@ -116,24 +123,39 @@ async function sendA2AMessageHTTP(agentType: 'data-processor' | 'summarizer' | '
     const result: any = await response.json();
     console.log(`A2A HTTP response from ${agentType}:`, JSON.stringify(result, null, 2));
     
-    // Wait for task completion if it's in working state
-    if (result.task?.status?.state === "working") {
-      console.log(`Waiting for ${agentType} task to complete...`);
-      let taskId = result.task.id;
-      
-      while (true) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
+    // Handle new A2A format response
+    if (result.task) {
+      // Wait for task completion if it's in working state
+      if (result.task.status?.state === "working") {
+        console.log(`Waiting for ${agentType} task to complete...`);
+        let taskId = result.task.id;
         
-        const taskResponse = await fetch(`${baseUrl}/api/a2a/task/${taskId}`);
-        if (taskResponse.ok) {
-          const task: any = await taskResponse.json();
-          if (task.status.state !== "working") {
-            console.log(`Task completed for ${agentType}:`, JSON.stringify(task, null, 2));
-            return task.result || task;
+        while (true) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
+          const taskResponse = await fetch(`${baseUrl}/api/a2a/task/${taskId}`);
+          if (taskResponse.ok) {
+            const taskResult: any = await taskResponse.json();
+            if (taskResult.task?.status?.state !== "working") {
+              console.log(`Task completed for ${agentType}:`, JSON.stringify(taskResult, null, 2));
+              // Extract text from message parts for new A2A format
+              const taskFirstPart = taskResult.task?.status?.message?.parts?.[0];
+              if (taskFirstPart && 'text' in taskFirstPart) {
+                return taskFirstPart.text;
+              }
+              return taskResult.task?.result || taskResult;
+            }
+          } else {
+            break;
           }
-        } else {
-          break;
         }
+      }
+      
+      // Extract text from message parts for new A2A format
+      const resultFirstPart = result.task.status?.message?.parts?.[0];
+      if (resultFirstPart && 'text' in resultFirstPart) {
+        console.log(`Extracting text from A2A message for ${agentType}`);
+        return resultFirstPart.text;
       }
     }
     
