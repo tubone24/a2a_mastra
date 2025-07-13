@@ -197,7 +197,7 @@ cd a2a_mastra
 cp .env.example .env
 ```
 
-### 3. Configure your `.env` file:
+### 3. Configure your `.env` file
 ```env
 # AWS Credentials for Amazon Bedrock
 AWS_ACCESS_KEY_ID=your-access-key-id
@@ -556,7 +556,7 @@ a2a-mastra-demo/
 
 ### Current Architecture
 
-Agent services use a hybrid architecture:
+Agent services use a hybrid architecture
 
 **Express Server Agent (Gateway):**
 - **Express Server**: Node.js-based server (started with `node dist/index.js`)
