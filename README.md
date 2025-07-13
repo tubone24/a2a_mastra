@@ -360,36 +360,6 @@ sequenceDiagram
     Frontend->>Frontend: Render Agent Cards<br/>- Status indicators<br/>- Capabilities<br/>- Supported task types
 ```
 
-#### Agent Discovery Error Handling
-
-```mermaid
-sequenceDiagram
-    participant Gateway
-    participant MastraAgent
-    participant ExpressAgent
-    
-    Note over Gateway,ExpressAgent: Fallback Discovery Mechanism
-    
-    Gateway->>MastraAgent: Mastra A2A.getCard()<br/>agentId: "data-processor-agent-01"
-    MastraAgent-->>Gateway: Connection Error
-    
-    Gateway->>MastraAgent: HTTP Fallback<br/>GET /api/a2a/agent
-    alt Agent Responds
-        MastraAgent-->>Gateway: Agent Card Data
-    else Agent Unavailable
-        Gateway->>Gateway: Mark as "offline"<br/>Use cached agent info
-    end
-    
-    Gateway->>ExpressAgent: HTTP GET /api/a2a/agent
-    alt Agent Responds
-        ExpressAgent-->>Gateway: Agent Card Data
-    else Network Error
-        Gateway->>Gateway: Mark as "unknown"<br/>Skip from discovery
-    end
-    
-    Note over Gateway: Return Available Agents Only
-```
-
 ### A2A Protocol
 
 The system implements unified Mastra A2A protocol across all agents:
