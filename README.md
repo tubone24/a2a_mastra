@@ -10,10 +10,10 @@ A demonstration of Agent-to-Agent (A2A) communication protocol using the Mastra 
 
 The system consists of four specialized agents that communicate via the A2A protocol:
 
-1. **Gateway Agent** - Request routing and workflow orchestration
-2. **Data Processor Agent** - Data analysis and transformation
-3. **Summarizer Agent** - Content summarization and insight extraction
-4. **Web Search Agent** - Real-time web information retrieval
+1. **Gateway Agent** - Request routing and workflow orchestration(A2A Client Agent)
+2. **Data Processor Agent** - Data analysis and transformation(A2A Remote Agent)
+3. **Summarizer Agent** - Content summarization and insight extraction(A2A Remote Agent)
+4. **Web Search Agent** - Real-time web information retrieval(A2A Remote Agent)
 
 ### Technology Stack
 - **Framework**: Hybrid Architecture - Gateway (Express Server + REST API) + Data Processor, Summarizer, Web Search (Mastra Dev Server)
