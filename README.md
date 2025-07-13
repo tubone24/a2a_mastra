@@ -415,9 +415,9 @@ sequenceDiagram
     participant MCPServer
     participant BraveAPI
     
-    Note over Gateway,WebSearch: Agent Card Exchange
+    Note over Gateway,WebSearch: Agent Card Exchange via Mastra A2A
     
-    Gateway->>WebSearch: GET /api/a2a/agent
+    Gateway->>WebSearch: A2A.getCard()<br/>agentId: "web-search-agent-01"<br/>Port: 3004
     WebSearch-->>Gateway: {<br/>  agentId: "web-search-agent-01",<br/>  name: "Web Search Agent",<br/>  capabilities: ["web-search", "news-search"],<br/>  mcpEnabled: true,<br/>  protocols: ["a2a/v1", "mcp/v1"]<br/>}
     
     Note over Client,BraveAPI: Search Request Flow
@@ -425,12 +425,12 @@ sequenceDiagram
     Client->>Gateway: POST /api/a2a/agents<br/>{type: "web-search", query: "AI trends 2024"}
     activate Gateway
     
-    Gateway->>WebSearch: POST /api/a2a/message<br/>{<br/>  type: "search",<br/>  query: "AI trends 2024",<br/>  options: {limit: 10},<br/>  metadata: {requestId: "req-789"}<br/>}
+    Gateway->>WebSearch: A2A.sendMessage({<br/>  to: "web-search-agent-01",<br/>  from: "gateway-agent-01",<br/>  content: {<br/>    type: "search",<br/>    query: "AI trends 2024",<br/>    options: {limit: 10}<br/>  }<br/>})
     activate WebSearch
     
-    Note over WebSearch,MCPServer: MCP Communication
+    Note over WebSearch,MCPServer: MCP Communication via Stdio
     
-    WebSearch->>MCPServer: POST /mcp/execute<br/>{<br/>  tool: "brave_web_search",<br/>  arguments: {<br/>    query: "AI trends 2024",<br/>    count: 10<br/>  }<br/>}
+    WebSearch->>MCPServer: MCP Stdio Protocol<br/>{<br/>  method: "tool/call",<br/>  params: {<br/>    name: "brave_web_search",<br/>    arguments: {<br/>      query: "AI trends 2024",<br/>      count: 10<br/>    }<br/>  }<br/>}
     activate MCPServer
     
     MCPServer->>BraveAPI: GET /web/search<br/>Headers: {<br/>  "X-Subscription-Token": "api-key",<br/>  "Accept": "application/json"<br/>}<br/>Query: q=AI+trends+2024&count=10
@@ -439,7 +439,7 @@ sequenceDiagram
     
     MCPServer->>MCPServer: Format Results<br/>Extract Relevant Data
     
-    MCPServer-->>WebSearch: {<br/>  success: true,<br/>  results: [formatted_results],<br/>  metadata: {<br/>    source: "brave",<br/>    resultCount: 10<br/>  }<br/>}
+    MCPServer-->>WebSearch: MCP Stdio Response<br/>{<br/>  content: {<br/>    type: "tool_response",<br/>    tool_use_id: "...",<br/>    content: [<br/>      {type: "text", text: "Search results..."}<br/>    ]<br/>  }<br/>}
     deactivate MCPServer
     
     WebSearch->>WebSearch: Analyze with Bedrock<br/>{<br/>  task: "Summarize search results",<br/>  context: search_results<br/>}
@@ -472,7 +472,7 @@ sequenceDiagram
     
     Note over Gateway,Summarizer: Phase 2: Initial Web Search (Async)
     
-    Gateway->>WebSearch: POST /api/a2a/task<br/>{<br/>  taskId: "search-sub-task-1",<br/>  type: "comprehensive-search",<br/>  query: "AI healthcare trends 2024",<br/>  options: {sources: ["web", "news"]}<br/>}
+    Gateway->>WebSearch: A2A.createTask({<br/>  agentId: "web-search-agent-01",<br/>  taskType: "comprehensive-search",<br/>  payload: {<br/>    query: "AI healthcare trends 2024",<br/>    options: {sources: ["web", "news"]}<br/>  }<br/>})<br/>Port: 3004
     activate WebSearch
     
     WebSearch-->>Gateway: {<br/>  taskId: "search-sub-task-1",<br/>  status: "accepted",<br/>  estimatedTime: "2-3 minutes"<br/>}
@@ -480,7 +480,7 @@ sequenceDiagram
     Note over Client,WebSearch: Client Polling During Search Phase
     
     Client->>Gateway: GET /api/a2a/task/research-abc-123
-    Gateway->>WebSearch: GET /api/a2a/task/search-sub-task-1
+    Gateway->>WebSearch: A2A.streamTaskUpdates("search-sub-task-1")
     WebSearch-->>Gateway: {status: "working", progress: 30, phase: "web-search"}
     Gateway-->>Client: {<br/>  status: "working",<br/>  currentPhase: "search",<br/>  progress: 30,<br/>  details: "Searching web sources..."<br/>}
     
@@ -532,86 +532,6 @@ sequenceDiagram
     deactivate Gateway
 ```
 
-### Asynchronous Task Processing Flow
-
-#### For Mastra Dev Server Agents (Data Processor & Summarizer)
-
-```mermaid
-sequenceDiagram
-    participant Client
-    participant Gateway
-    participant MastraAgent
-    
-    Note over Client,MastraAgent: Mastra A2A Task Processing
-    
-    Client->>Gateway: POST /api/a2a/task<br/>{<br/>  type: "long-running-analysis",<br/>  data: {large_dataset}<br/>}
-    activate Gateway
-    
-    Gateway->>Gateway: Generate taskId: "task-abc-123"
-    
-    Gateway->>MastraAgent: A2A.createTask({<br/>  agentId: "data-processor-agent-01",<br/>  taskType: "analysis",<br/>  payload: {data: {large_dataset}}<br/>})<br/>Port: 3002/3003
-    activate MastraAgent
-    
-    MastraAgent-->>Gateway: {<br/>  taskId: "task-abc-123",<br/>  status: "accepted",<br/>  estimatedTime: "5 minutes"<br/>}
-    
-    Gateway-->>Client: {<br/>  taskId: "task-abc-123",<br/>  status: "working",<br/>  pollUrl: "/api/a2a/task/task-abc-123"<br/>}
-    deactivate Gateway
-    
-    Note over Client,MastraAgent: Status Polling with Streaming
-    
-    Client->>Gateway: GET /api/a2a/task/task-abc-123
-    Gateway->>MastraAgent: A2A.streamTaskUpdates("task-abc-123")
-    MastraAgent-->>Gateway: {status: "working", progress: 45}
-    Gateway-->>Client: {status: "working", progress: 45}
-    
-    MastraAgent->>MastraAgent: Complete Processing
-    deactivate MastraAgent
-    
-    Client->>Gateway: GET /api/a2a/task/task-abc-123
-    Gateway->>MastraAgent: A2A.streamTaskUpdates("task-abc-123")
-    MastraAgent-->>Gateway: {<br/>  status: "completed",<br/>  result: {analysis_results}<br/>}
-    Gateway-->>Client: {<br/>  status: "completed",<br/>  result: {analysis_results}<br/>}
-```
-
-#### For Express Server Agents (Gateway & Web Search)
-
-```mermaid
-sequenceDiagram
-    participant Client
-    participant Gateway
-    participant ExpressAgent
-    
-    Note over Client,ExpressAgent: Express A2A Task Processing
-    
-    Client->>Gateway: POST /api/a2a/task<br/>{<br/>  type: "web-search-task",<br/>  query: "search query"<br/>}
-    activate Gateway
-    
-    Gateway->>Gateway: Generate taskId: "task-xyz-456"
-    
-    Gateway->>ExpressAgent: POST /api/a2a/task<br/>{<br/>  taskId: "task-xyz-456",<br/>  type: "search",<br/>  query: "search query"<br/>}<br/>Port: 3004
-    activate ExpressAgent
-    
-    ExpressAgent-->>Gateway: {<br/>  taskId: "task-xyz-456",<br/>  status: "accepted",<br/>  estimatedTime: "3 minutes"<br/>}
-    
-    Gateway-->>Client: {<br/>  taskId: "task-xyz-456",<br/>  status: "working",<br/>  pollUrl: "/api/a2a/task/task-xyz-456"<br/>}
-    deactivate Gateway
-    
-    Note over Client,ExpressAgent: Status Polling via HTTP
-    
-    Client->>Gateway: GET /api/a2a/task/task-xyz-456
-    Gateway->>ExpressAgent: GET /api/a2a/task/task-xyz-456
-    ExpressAgent-->>Gateway: {status: "working", progress: 60}
-    Gateway-->>Client: {status: "working", progress: 60}
-    
-    ExpressAgent->>ExpressAgent: Complete Processing
-    deactivate ExpressAgent
-    
-    Client->>Gateway: GET /api/a2a/task/task-xyz-456
-    Gateway->>ExpressAgent: GET /api/a2a/task/task-xyz-456
-    ExpressAgent-->>Gateway: {<br/>  status: "completed",<br/>  result: {search_results}<br/>}
-    Gateway-->>Client: {<br/>  status: "completed",<br/>  result: {search_results}<br/>}
-```
-
 ## 🔧 Development
 
 ### Project Structure
@@ -649,32 +569,6 @@ Agent services use a hybrid architecture:
 - **Native A2A Protocol**: Mastra standard A2A communication protocol
 - **In-Memory Storage**: In-memory storage via LibSQL
 - **Docker Container**: Isolated deployment with native Mastra features
-
-### Local Development
-
-Each agent can be developed independently:
-
-```bash
-# Gateway Agent (Express Server)
-cd agents/gateway
-npm install
-npm run start    # node dist/index.js
-
-# Data Processor (Mastra Dev Server)
-cd agents/data-processor
-npm install
-npm run start    # mastra dev
-
-# Summarizer Agent (Mastra Dev Server)
-cd agents/summarizer
-npm install
-npm run start    # mastra dev
-
-# Web Search Agent (Mastra Dev Server)
-cd agents/web-search
-npm install
-npm run start    # mastra dev
-```
 
 ### Architecture Benefits
 
