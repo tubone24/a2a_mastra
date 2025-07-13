@@ -302,8 +302,14 @@ curl http://localhost:3001/api/a2a/task/research-task-abc-123
 
 ### A2A Protocol
 
-The system implements a standardized A2A protocol with three main endpoints:
+The system implements a hybrid A2A protocol:
 
+**For Mastra Dev Server Agents (Data Processor & Summarizer):**
+1. **Agent Discovery** - `A2A.getAgentCard(agentId)` - Agent capability discovery
+2. **Message Exchange** - `A2A.sendMessage({to, from, content})` - Synchronous communication
+3. **Task Management** - `A2A.createTask({agentId, taskType, payload})` - Asynchronous processing
+
+**For Express Server Agents (Gateway & Web Search):**
 1. **Message Endpoint** (`/api/a2a/message`) - Synchronous message exchange
 2. **Task Endpoint** (`/api/a2a/task`) - Asynchronous task processing
 3. **Agent Discovery** (`/api/a2a/agent`) - Agent capability discovery
@@ -317,12 +323,12 @@ sequenceDiagram
     participant DataProcessor
     participant Summarizer
     
-    Note over Gateway,Summarizer: Agent Discovery Phase
+    Note over Gateway,Summarizer: Agent Discovery Phase (Mastra A2A)
     
-    Gateway->>DataProcessor: GET /api/a2a/agent
+    Gateway->>DataProcessor: A2A.getAgentCard("data-processor-agent-01")<br/>Port: 3002
     DataProcessor-->>Gateway: {agentId, name, capabilities,<br/>supportedTypes: ["process", "analyze"]}
     
-    Gateway->>Summarizer: GET /api/a2a/agent
+    Gateway->>Summarizer: A2A.getAgentCard("summarizer-agent-01")<br/>Port: 3003
     Summarizer-->>Gateway: {agentId, name, capabilities,<br/>supportedTypes: ["summarize", "executive-summary"]}
     
     Note over Client,Summarizer: Workflow Execution Phase
@@ -332,14 +338,14 @@ sequenceDiagram
     
     Gateway->>Gateway: Create Workflow Execution<br/>Generate traceId & workflowId
     
-    Gateway->>DataProcessor: POST /api/a2a/message<br/>{<br/>  type: "process",<br/>  data: {...},<br/>  metadata: {<br/>    workflowId: "wf-123",<br/>    traceId: "trace-456",<br/>    step: 1<br/>  }<br/>}
+    Gateway->>DataProcessor: A2A.sendMessage({<br/>  to: "data-processor-agent-01",<br/>  from: "gateway-agent-01",<br/>  content: {<br/>    type: "process",<br/>    data: {...},<br/>    metadata: {<br/>      workflowId: "wf-123",<br/>      traceId: "trace-456",<br/>      step: 1<br/>    }<br/>  }<br/>})
     activate DataProcessor
     
     DataProcessor->>DataProcessor: Process with Bedrock<br/>Track with Langfuse
     DataProcessor-->>Gateway: {<br/>  status: "success",<br/>  data: {processed_data, insights},<br/>  metadata: {processingTime: 1200ms}<br/>}
     deactivate DataProcessor
     
-    Gateway->>Summarizer: POST /api/a2a/message<br/>{<br/>  type: "summarize",<br/>  data: processed_data,<br/>  options: {audienceType: "executive"},<br/>  metadata: {<br/>    workflowId: "wf-123",<br/>    traceId: "trace-456",<br/>    step: 2<br/>  }<br/>}
+    Gateway->>Summarizer: A2A.sendMessage({<br/>  to: "summarizer-agent-01",<br/>  from: "gateway-agent-01",<br/>  content: {<br/>    type: "summarize",<br/>    data: processed_data,<br/>    options: {audienceType: "executive"},<br/>    metadata: {<br/>      workflowId: "wf-123",<br/>      traceId: "trace-456",<br/>      step: 2<br/>    }<br/>  }<br/>})
     activate Summarizer
     
     Summarizer->>Summarizer: Generate with Bedrock<br/>Track with Langfuse
@@ -437,13 +443,13 @@ sequenceDiagram
     
     Note over Gateway,Summarizer: Phase 3: Data Analysis (Async)
     
-    Gateway->>DataProcessor: POST /api/a2a/task<br/>{<br/>  taskId: "analyze-sub-task-2",<br/>  type: "research-analysis",<br/>  data: {searchResults},<br/>  options: {analyzePatterns: true}<br/>}
+    Gateway->>DataProcessor: A2A.createTask({<br/>  agentId: "data-processor-agent-01",<br/>  taskType: "research-analysis",<br/>  payload: {<br/>    data: {searchResults},<br/>    options: {analyzePatterns: true}<br/>  }<br/>})<br/>Port: 3002
     activate DataProcessor
     
     DataProcessor-->>Gateway: {<br/>  taskId: "analyze-sub-task-2",<br/>  status: "accepted",<br/>  estimatedTime: "3-4 minutes"<br/>}
     
     Client->>Gateway: GET /api/a2a/task/research-abc-123
-    Gateway->>DataProcessor: GET /api/a2a/task/analyze-sub-task-2
+    Gateway->>DataProcessor: A2A.streamTaskUpdates("analyze-sub-task-2")
     DataProcessor-->>Gateway: {status: "working", progress: 60, phase: "analysis"}
     Gateway-->>Client: {<br/>  status: "working",<br/>  currentPhase: "analyze",<br/>  progress: 60,<br/>  details: "Analyzing patterns and trends..."<br/>}
     
@@ -454,13 +460,13 @@ sequenceDiagram
     
     Note over Gateway,Summarizer: Phase 4: Synthesis & Report Generation (Async)
     
-    Gateway->>Summarizer: POST /api/a2a/task<br/>{<br/>  taskId: "synthesis-sub-task-3",<br/>  type: "research-synthesis",<br/>  data: {searchResults, analysisResults},<br/>  options: {<br/>    reportType: "comprehensive",<br/>    audienceType: "technical"<br/>  }<br/>}
+    Gateway->>Summarizer: A2A.createTask({<br/>  agentId: "summarizer-agent-01",<br/>  taskType: "research-synthesis",<br/>  payload: {<br/>    data: {searchResults, analysisResults},<br/>    options: {<br/>      reportType: "comprehensive",<br/>      audienceType: "technical"<br/>    }<br/>  }<br/>})<br/>Port: 3003
     activate Summarizer
     
     Summarizer-->>Gateway: {<br/>  taskId: "synthesis-sub-task-3",<br/>  status: "accepted",<br/>  estimatedTime: "2-3 minutes"<br/>}
     
     Client->>Gateway: GET /api/a2a/task/research-abc-123
-    Gateway->>Summarizer: GET /api/a2a/task/synthesis-sub-task-3
+    Gateway->>Summarizer: A2A.streamTaskUpdates("synthesis-sub-task-3")
     Summarizer-->>Gateway: {status: "working", progress: 85, phase: "synthesis"}
     Gateway-->>Client: {<br/>  status: "working",<br/>  currentPhase: "synthesize",<br/>  progress: 85,<br/>  details: "Generating comprehensive report..."<br/>}
     
@@ -480,41 +486,82 @@ sequenceDiagram
 
 ### Asynchronous Task Processing Flow
 
+#### For Mastra Dev Server Agents (Data Processor & Summarizer)
+
 ```mermaid
 sequenceDiagram
     participant Client
     participant Gateway
-    participant Agent
+    participant MastraAgent
     
-    Note over Client,Agent: Asynchronous Task Submission
+    Note over Client,MastraAgent: Mastra A2A Task Processing
     
     Client->>Gateway: POST /api/a2a/task<br/>{<br/>  type: "long-running-analysis",<br/>  data: {large_dataset}<br/>}
     activate Gateway
     
     Gateway->>Gateway: Generate taskId: "task-abc-123"
     
-    Gateway->>Agent: POST /api/a2a/task<br/>{<br/>  taskId: "task-abc-123",<br/>  type: "analysis",<br/>  data: {large_dataset}<br/>}
-    activate Agent
+    Gateway->>MastraAgent: A2A.createTask({<br/>  agentId: "data-processor-agent-01",<br/>  taskType: "analysis",<br/>  payload: {data: {large_dataset}}<br/>})<br/>Port: 3002/3003
+    activate MastraAgent
     
-    Agent-->>Gateway: {<br/>  taskId: "task-abc-123",<br/>  status: "accepted",<br/>  estimatedTime: "5 minutes"<br/>}
+    MastraAgent-->>Gateway: {<br/>  taskId: "task-abc-123",<br/>  status: "accepted",<br/>  estimatedTime: "5 minutes"<br/>}
     
     Gateway-->>Client: {<br/>  taskId: "task-abc-123",<br/>  status: "working",<br/>  pollUrl: "/api/a2a/task/task-abc-123"<br/>}
     deactivate Gateway
     
-    Note over Client,Agent: Status Polling
+    Note over Client,MastraAgent: Status Polling with Streaming
     
     Client->>Gateway: GET /api/a2a/task/task-abc-123
-    Gateway->>Agent: GET /api/a2a/task/task-abc-123
-    Agent-->>Gateway: {status: "working", progress: 45}
+    Gateway->>MastraAgent: A2A.streamTaskUpdates("task-abc-123")
+    MastraAgent-->>Gateway: {status: "working", progress: 45}
     Gateway-->>Client: {status: "working", progress: 45}
     
-    Agent->>Agent: Complete Processing
-    deactivate Agent
+    MastraAgent->>MastraAgent: Complete Processing
+    deactivate MastraAgent
     
     Client->>Gateway: GET /api/a2a/task/task-abc-123
-    Gateway->>Agent: GET /api/a2a/task/task-abc-123
-    Agent-->>Gateway: {<br/>  status: "completed",<br/>  result: {analysis_results}<br/>}
+    Gateway->>MastraAgent: A2A.streamTaskUpdates("task-abc-123")
+    MastraAgent-->>Gateway: {<br/>  status: "completed",<br/>  result: {analysis_results}<br/>}
     Gateway-->>Client: {<br/>  status: "completed",<br/>  result: {analysis_results}<br/>}
+```
+
+#### For Express Server Agents (Gateway & Web Search)
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Gateway
+    participant ExpressAgent
+    
+    Note over Client,ExpressAgent: Express A2A Task Processing
+    
+    Client->>Gateway: POST /api/a2a/task<br/>{<br/>  type: "web-search-task",<br/>  query: "search query"<br/>}
+    activate Gateway
+    
+    Gateway->>Gateway: Generate taskId: "task-xyz-456"
+    
+    Gateway->>ExpressAgent: POST /api/a2a/task<br/>{<br/>  taskId: "task-xyz-456",<br/>  type: "search",<br/>  query: "search query"<br/>}<br/>Port: 3004
+    activate ExpressAgent
+    
+    ExpressAgent-->>Gateway: {<br/>  taskId: "task-xyz-456",<br/>  status: "accepted",<br/>  estimatedTime: "3 minutes"<br/>}
+    
+    Gateway-->>Client: {<br/>  taskId: "task-xyz-456",<br/>  status: "working",<br/>  pollUrl: "/api/a2a/task/task-xyz-456"<br/>}
+    deactivate Gateway
+    
+    Note over Client,ExpressAgent: Status Polling via HTTP
+    
+    Client->>Gateway: GET /api/a2a/task/task-xyz-456
+    Gateway->>ExpressAgent: GET /api/a2a/task/task-xyz-456
+    ExpressAgent-->>Gateway: {status: "working", progress: 60}
+    Gateway-->>Client: {status: "working", progress: 60}
+    
+    ExpressAgent->>ExpressAgent: Complete Processing
+    deactivate ExpressAgent
+    
+    Client->>Gateway: GET /api/a2a/task/task-xyz-456
+    Gateway->>ExpressAgent: GET /api/a2a/task/task-xyz-456
+    ExpressAgent-->>Gateway: {<br/>  status: "completed",<br/>  result: {search_results}<br/>}
+    Gateway-->>Client: {<br/>  status: "completed",<br/>  result: {search_results}<br/>}
 ```
 
 ## 🔧 Development
