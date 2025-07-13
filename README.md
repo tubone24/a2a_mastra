@@ -105,24 +105,24 @@ graph TB
     style SM_MASTRA_STORAGE fill:#fff3e0
 ```
 
-**アーキテクチャの特徴:**
-- **Data Processor & Summarizer**: Mastra標準のDev Server（Hono）でA2A通信ネイティブサポート
-- **Gateway & Web Search**: Express Server + 独自A2A実装によるHTTP通信
-- **通信方式**: Data Processor・SummarizerはMastraネイティブA2A、Gateway・Web SearchはExpress実装
+**Architecture Features:**
+- **Data Processor & Summarizer**: Mastra standard Dev Server (Hono) with native A2A communication support
+- **Gateway & Web Search**: Express Server + custom A2A implementation via HTTP communication
+- **Communication Method**: Data Processor & Summarizer use Mastra native A2A, Gateway & Web Search use Express implementation
 
-### Mastra標準A2Aで実現できなかった制約
+### Constraints with Mastra Standard A2A
 
-このプロジェクトでは、Gateway・Web SearchエージェントではExpressサーバーによる独自A2A実装を採用し、Data Processor・SummarizerエージェントではMastra標準のDev Serverを使用しています。一部エージェントでExpress実装を採用しているのは、Mastra標準のDev ServerのA2A機能では以下の制約があったためです：
+This project uses Express server-based custom A2A implementation for Gateway & Web Search agents, while Data Processor & Summarizer agents use Mastra's standard Dev Server. Some agents adopt Express implementation due to the following constraints with Mastra's standard Dev Server A2A functionality:
 
-1. **Single Agent Per Instance制約**: Mastra Dev Serverは基本的に1つのエージェントインスタンス用に設計されており、複数エージェント間でのネットワーク分散通信に課題があった
+1. **Single Agent Per Instance Constraint**: Mastra Dev Server is primarily designed for single agent instances, presenting challenges for distributed network communication between multiple agents
 
-2. **In-Memory Storage制限**: LibSQLによるメモリ内ストレージのため、エージェント間での永続的なタスク状態管理や長時間実行ワークフローの継続性に制限があった
+2. **In-Memory Storage Limitations**: LibSQL's in-memory storage limits persistent task state management between agents and continuity of long-running workflows
 
-3. **Production Deployment制約**: Mastra Dev Serverは主にローカル開発環境用で、Docker化された本番環境での複数コンテナ間通信には制約があった
+3. **Production Deployment Constraints**: Mastra Dev Server is mainly for local development environments, with limitations for multi-container communication in Dockerized production environments
 
-4. **Custom Middleware Support**: CORS設定、独自認証、カスタムルーティングなど、本番環境で必要な柔軟なHTTPミドルウェア設定が困難だった
+4. **Custom Middleware Support**: Difficulties in configuring flexible HTTP middleware necessary for production environments, such as CORS settings, custom authentication, and custom routing
 
-これらの制約により、Gateway・Web SearchエージェントではExpressサーバーによる独自A2A実装を採用し、Data Processor・SummarizerエージェントがMastra標準のA2A機能を使用する混合アーキテクチャとなっています。
+Due to these constraints, we have adopted a hybrid architecture where Gateway & Web Search agents use Express server-based custom A2A implementation, while Data Processor & Summarizer agents use Mastra's standard A2A functionality.
 
 ### System Architecture
 
@@ -133,10 +133,10 @@ graph TB
     end
     
     subgraph "Agent Layer"
-        GW[Gateway Agent<br/>(Express Server)<br/>Port: 3001]
-        DP[Data Processor<br/>(Mastra Dev Server)<br/>Port: 3002]
-        SM[Summarizer Agent<br/>(Mastra Dev Server)<br/>Port: 3003]
-        WS[Web Search Agent<br/>(Express Server)<br/>Port: 3004]
+        GW[Gateway Agent<br/>Express Server<br/>Port: 3001]
+        DP[Data Processor<br/>Mastra Dev Server<br/>Port: 3002]
+        SM[Summarizer Agent<br/>Mastra Dev Server<br/>Port: 3003]
+        WS[Web Search Agent<br/>Express Server<br/>Port: 3004]
     end
     
     subgraph "External Services"
@@ -541,24 +541,24 @@ a2a-mastra-demo/
 
 ### Current Architecture
 
-エージェントサービスは混合アーキテクチャで実装されています：
+Agent services are implemented with a hybrid architecture:
 
 **Data Processor & Summarizer Agents:**
-- **Mastra Dev Server**: Honoベースのネイティブサーバー（`mastra dev`で起動）
-- **Built-in A2A Protocol**: Mastra標準のA2A通信プロトコル
-- **In-Memory Storage**: LibSQLによるメモリ内ストレージ
+- **Mastra Dev Server**: Hono-based native server (started with `mastra dev`)
+- **Built-in A2A Protocol**: Mastra standard A2A communication protocol
+- **In-Memory Storage**: In-memory storage via LibSQL
 
 **Gateway & Web Search Agents:**
-- **Express Server**: HTTPリクエスト処理とAPIルーティング
-- **Mastra Instance**: エージェント定義、ワークフロー、独自A2A通信実装
-- **Custom A2A Implementation**: Express経由の独自A2A実装
+- **Express Server**: HTTP request processing and API routing
+- **Mastra Instance**: Agent definitions, workflows, and custom A2A communication implementation
+- **Custom A2A Implementation**: Custom A2A implementation via Express
 
 **Deployment:**
-- **Docker Container**: 各サービスの分離デプロイメント
+- **Docker Container**: Isolated deployment of each service
 
 ### Local Development
 
-各エージェントは独立して開発できます：
+Each agent can be developed independently:
 
 ```bash
 # Data Processor (Mastra Dev Server)
@@ -584,13 +584,13 @@ npm run dev
 
 ### Migration Notes
 
-プロジェクトは現在、混合アーキテクチャ状態にあり、将来的にはMastra完全対応への移行が可能です：
+The project is currently in a hybrid architecture state, with the possibility of future migration to full Mastra compatibility:
 
-**現在の状況:**
-- Data Processor & Summarizer: Mastra標準A2A
-- Gateway & Web Search: Express + 独自A2A実装
+**Current Status:**
+- Data Processor & Summarizer: Mastra standard A2A
+- Gateway & Web Search: Express + custom A2A implementation
 
-**将来の移行オプション:**
+**Future Migration Options:**
 - Express routes → Mastra `registerApiRoute`
 - Express server → Mastra built-in Hono server  
 - Custom A2A implementation → Mastra native A2A protocol
