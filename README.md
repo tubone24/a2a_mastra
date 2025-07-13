@@ -296,7 +296,7 @@ curl http://localhost:3001/api/a2a/task/research-task-abc-123
 
 ## 🔄 Communication Flows
 
-### Agent Discovery Protocol
+### Agent Discovery
 
 The system implements a centralized agent discovery mechanism through the Gateway agent. The discovery process allows agents to register their capabilities and discover other agents in the network.
 
@@ -346,7 +346,7 @@ sequenceDiagram
     Frontend->>Frontend: Render Agent Cards<br/>- Status indicators<br/>- Capabilities<br/>- Supported task types
 ```
 
-### A2A Protocol
+### A2A
 
 The system implements unified Mastra A2A protocol across all agents:
 
@@ -405,7 +405,7 @@ sequenceDiagram
     deactivate Gateway
 ```
 
-### Web Search Flow with MCP Protocol Details
+### Web Search Flow with MCP Details
 
 ```mermaid
 sequenceDiagram
