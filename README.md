@@ -300,6 +300,86 @@ curl http://localhost:3001/api/a2a/task/research-task-abc-123
 
 ## 🔄 Communication Flows
 
+### Agent Discovery Protocol
+
+The system implements a centralized agent discovery mechanism through the Gateway agent. The discovery process allows agents to register their capabilities and discover other agents in the network.
+
+```mermaid
+sequenceDiagram
+    participant Frontend
+    participant FrontendAPI
+    participant Gateway
+    participant DataProcessor
+    participant Summarizer
+    participant WebSearch
+    
+    Note over Frontend,WebSearch: Agent Discovery Initiation
+    
+    Frontend->>FrontendAPI: GET /api/a2a/agents
+    activate FrontendAPI
+    
+    FrontendAPI->>Gateway: GET /api/a2a/agents<br/>http://gateway:3001
+    activate Gateway
+    
+    Note over Gateway,WebSearch: Gateway Discovers All Agents
+    
+    Gateway->>DataProcessor: Mastra A2A.getCard()<br/>agentId: "data-processor-agent-01"<br/>Port: 3002
+    activate DataProcessor
+    DataProcessor-->>Gateway: Agent Card Response<br/>{id: "data-processor-agent-01", capabilities: ["data-analysis"], status: "online"}
+    deactivate DataProcessor
+    
+    Gateway->>Summarizer: Mastra A2A.getCard()<br/>agentId: "summarizer-agent-01"<br/>Port: 3003
+    activate Summarizer
+    Summarizer-->>Gateway: Agent Card Response<br/>{id: "summarizer-agent-01", capabilities: ["text-summarization"], status: "online"}
+    deactivate Summarizer
+    
+    Gateway->>WebSearch: HTTP GET /api/a2a/agent<br/>Port: 3004
+    activate WebSearch
+    WebSearch-->>Gateway: Agent Card Response<br/>{id: "web-search-agent-01", capabilities: ["web-search"], mcpEnabled: true}
+    deactivate WebSearch
+    
+    Note over Gateway: Aggregate Agent Information
+    
+    Gateway-->>FrontendAPI: Discovery Response<br/>{gateway: {id: "gateway-agent-01", status: "online"},<br/>connectedAgents: [3 agents], totalAgents: 4}
+    deactivate Gateway
+    
+    FrontendAPI-->>Frontend: Agent List Response<br/>{agents: [4 agents], discoveryTime: "150ms", onlineAgents: 4}
+    deactivate FrontendAPI
+    
+    Note over Frontend: Display Agent Dashboard
+    Frontend->>Frontend: Render Agent Cards<br/>- Status indicators<br/>- Capabilities<br/>- Supported task types
+```
+
+#### Agent Discovery Error Handling
+
+```mermaid
+sequenceDiagram
+    participant Gateway
+    participant MastraAgent
+    participant ExpressAgent
+    
+    Note over Gateway,ExpressAgent: Fallback Discovery Mechanism
+    
+    Gateway->>MastraAgent: Mastra A2A.getCard()<br/>agentId: "data-processor-agent-01"
+    MastraAgent-->>Gateway: Connection Error
+    
+    Gateway->>MastraAgent: HTTP Fallback<br/>GET /api/a2a/agent
+    alt Agent Responds
+        MastraAgent-->>Gateway: Agent Card Data
+    else Agent Unavailable
+        Gateway->>Gateway: Mark as "offline"<br/>Use cached agent info
+    end
+    
+    Gateway->>ExpressAgent: HTTP GET /api/a2a/agent
+    alt Agent Responds
+        ExpressAgent-->>Gateway: Agent Card Data
+    else Network Error
+        Gateway->>Gateway: Mark as "unknown"<br/>Skip from discovery
+    end
+    
+    Note over Gateway: Return Available Agents Only
+```
+
 ### A2A Protocol
 
 The system implements a hybrid A2A protocol:
@@ -313,6 +393,7 @@ The system implements a hybrid A2A protocol:
 1. **Message Endpoint** (`/api/a2a/message`) - Synchronous message exchange
 2. **Task Endpoint** (`/api/a2a/task`) - Asynchronous task processing
 3. **Agent Discovery** (`/api/a2a/agent`) - Agent capability discovery
+4. **Agent List** (`/api/a2a/agents`) - Multiple agent discovery (Gateway only)
 
 ### Workflow Sequence with Agent Discovery
 
