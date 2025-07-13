@@ -2,7 +2,7 @@
 
 A demonstration of Agent-to-Agent (A2A) communication protocol using the Mastra framework, featuring multiple specialized AI agents powered by Amazon Bedrock. This project showcases how autonomous agents can communicate, collaborate, and delegate tasks to achieve complex goals.
 
-**Current Implementation**: The system uses a hybrid architecture where Gateway agent runs on Express server with custom A2A implementation, while Data Processor, Summarizer, and Web Search agents use Mastra Dev Server with native A2A protocol.
+**Current Implementation**: The system uses a hybrid architecture where Gateway agent runs on Express server with REST API implementation, while Data Processor, Summarizer, and Web Search agents use Mastra Dev Server with native A2A protocol.
 
 ![demo](./docs/images/demo.gif)
 
@@ -16,7 +16,7 @@ The system consists of four specialized agents that communicate via the A2A prot
 4. **Web Search Agent** - Real-time web information retrieval
 
 ### Technology Stack
-- **Framework**: Hybrid Architecture - Gateway (Express Server + Custom A2A) + Data Processor, Summarizer, Web Search (Mastra Dev Server)
+- **Framework**: Hybrid Architecture - Gateway (Express Server + REST API) + Data Processor, Summarizer, Web Search (Mastra Dev Server)
 - **LLM**: Amazon Bedrock Claude 3.5 Sonnet
 - **Language**: TypeScript
 - **Frontend**: Next.js
@@ -28,11 +28,11 @@ The system consists of four specialized agents that communicate via the A2A prot
 
 ```mermaid
 flowchart TB
-   subgraph subGraph0["Express + Custom A2A - Gateway"]
+   subgraph subGraph0["Express + REST API - Gateway"]
       GW_EXPRESS["Express Server<br>Port: 3001"]
-      GW_ROUTES["Express Routes<br>/api/a2a/*"]
+      GW_ROUTES["Express Routes<br>/api/gateway/*"]
       GW_MASTRA_AGENT["Gateway Agent"]
-      GW_CUSTOM_A2A["Mastra A2A Client"]
+      GW_REST_API["REST API Interface"]
    end
    subgraph subGraph1["Gateway Agent (Express Server)"]
       subGraph0
@@ -84,7 +84,7 @@ flowchart TB
    end
    GW_EXPRESS --> GW_ROUTES
    GW_ROUTES --> GW_MASTRA_AGENT
-   GW_MASTRA_AGENT --> GW_CUSTOM_A2A & BEDROCK
+   GW_MASTRA_AGENT --> GW_REST_API & BEDROCK
    DP_MASTRA_DEV --> DP_MASTRA_HONO & DP_MASTRA_STORAGE
    DP_MASTRA_HONO --> DP_MASTRA_AGENT
    DP_MASTRA_AGENT --> DP_MASTRA_A2A & BEDROCK
@@ -94,7 +94,7 @@ flowchart TB
    WS_MASTRA_DEV --> WS_MASTRA_HONO & WS_MASTRA_STORAGE
    WS_MASTRA_HONO --> WS_MASTRA_AGENT
    WS_MASTRA_AGENT --> WS_MASTRA_A2A & WS_MCP_INTEGRATION & BEDROCK
-   GW_CUSTOM_A2A <-- Native A2A Protocol --> DP_MASTRA_A2A & SM_MASTRA_A2A & WS_MASTRA_A2A
+   GW_REST_API <-- Native A2A Protocol --> DP_MASTRA_A2A & SM_MASTRA_A2A & WS_MASTRA_A2A
    WS_MCP_INTEGRATION -- MCP Stdio --> MCP
    MCP --> BRAVE
    GW_MASTRA_AGENT -. Traces .-> LANGFUSE
@@ -112,8 +112,8 @@ flowchart TB
 ```
 
 **Architecture Features:**
-- **Hybrid Implementation**: Gateway uses Express with custom A2A, Data Processor/Summarizer/Web Search use Mastra Dev Server
-- **Mixed Communication Protocols**: Custom A2A protocol for Gateway, native Mastra A2A for other agents
+- **Hybrid Implementation**: Gateway uses Express with REST API, Data Processor/Summarizer/Web Search use Mastra Dev Server
+- **Mixed Communication Protocols**: REST API for Gateway, native Mastra A2A for other agents
 - **Native Integration**: Data Processor, Summarizer, and Web Search agents use built-in Hono server and LibSQL storage
 - **MCP Support**: Web Search agent integrates MCP protocol for external tool access
 
@@ -165,7 +165,7 @@ graph TB
 
 ## 🚀 Features
 
-- **Hybrid A2A Communication**: Custom A2A protocol for Gateway, native Mastra A2A for Data Processor/Summarizer/Web Search
+- **Hybrid API Communication**: REST API for Gateway, native Mastra A2A for Data Processor/Summarizer/Web Search
 - **Mixed Architecture**: Express server for Gateway, Mastra Dev Server for Data Processor/Summarizer/Web Search
 - **Workflow Orchestration**: Complex multi-step workflows with automatic task delegation
 - **Real-time Visualization**: Live visualization of agent communication flows
@@ -228,23 +228,23 @@ Once the system is running, access the frontend at `http://localhost:3000`.
 
 ### Available Operations
 
-1. **Data Processing** (`/api/a2a/agents` - type: process)
+1. **Data Processing** (`/api/gateway/agents` - type: process)
    - Analyzes and transforms data
    - Extracts patterns and insights
 
-2. **Summarization** (`/api/a2a/agents` - type: summarize)
+2. **Summarization** (`/api/gateway/agents` - type: summarize)
    - Creates concise summaries
    - Supports different audience types (technical, executive, general)
 
-3. **Analysis Workflow** (`/api/a2a/agents` - type: analyze)
+3. **Analysis Workflow** (`/api/gateway/agents` - type: analyze)
    - Combines data processing and summarization
    - End-to-end data analysis pipeline
 
-4. **Web Search** (`/api/a2a/agents` - type: web-search)
+4. **Web Search** (`/api/gateway/agents` - type: web-search)
    - Real-time web information retrieval
    - News and scholarly article search
 
-5. **Deep Research** (`/api/a2a/agents` - type: deep-research)
+5. **Deep Research** (`/api/gateway/agents` - type: deep-research)
    - Multi-step research workflow using asynchronous task processing
    - Combines web search, data processing, and summarization
    - Long-running tasks with progress tracking and status polling
@@ -253,7 +253,7 @@ Once the system is running, access the frontend at `http://localhost:3000`.
 
 ```bash
 # Analyze data with full workflow
-curl -X POST http://localhost:3001/api/a2a/agents \
+curl -X POST http://localhost:3001/api/gateway/agents \
   -H "Content-Type: application/json" \
   -d '{
     "type": "analyze",
@@ -264,7 +264,7 @@ curl -X POST http://localhost:3001/api/a2a/agents \
   }'
 
 # Deep Research (Asynchronous)
-curl -X POST http://localhost:3001/api/a2a/agents \
+curl -X POST http://localhost:3001/api/gateway/agents \
   -H "Content-Type: application/json" \
   -d '{
     "type": "deep-research",
@@ -282,7 +282,7 @@ curl -X POST http://localhost:3001/api/a2a/agents \
   "taskId": "research-task-abc-123",
   "status": "initiated",
   "estimatedDuration": "8-10 minutes",
-  "pollUrl": "/api/a2a/task/research-task-abc-123",
+  "pollUrl": "/api/gateway/task/research-task-abc-123",
   "steps": {
     "total": 5,
     "current": 1,
@@ -291,7 +291,7 @@ curl -X POST http://localhost:3001/api/a2a/agents \
 }
 
 # Poll for status
-curl http://localhost:3001/api/a2a/task/research-task-abc-123
+curl http://localhost:3001/api/gateway/task/research-task-abc-123
 ```
 
 ## 🔄 Communication Flows
@@ -311,10 +311,10 @@ sequenceDiagram
     
     Note over Frontend,WebSearch: Agent Discovery Initiation
     
-    Frontend->>FrontendAPI: GET /api/a2a/agents
+    Frontend->>FrontendAPI: GET /api/gateway/agents
     activate FrontendAPI
     
-    FrontendAPI->>Gateway: GET /api/a2a/agents<br/>http://gateway:3001
+    FrontendAPI->>Gateway: GET /api/gateway/agents<br/>http://gateway:3001
     activate Gateway
     
     Note over Gateway,WebSearch: Gateway Discovers All Agents
@@ -329,7 +329,7 @@ sequenceDiagram
     Summarizer-->>Gateway: Agent Card Response<br/>{id: "summarizer-agent-01", capabilities: ["text-summarization"], status: "online"}
     deactivate Summarizer
     
-    Gateway->>WebSearch: HTTP GET /api/a2a/agent<br/>Port: 3004
+    Gateway->>WebSearch: HTTP GET /api/gateway/info<br/>Port: 3004
     activate WebSearch
     WebSearch-->>Gateway: Agent Card Response<br/>{id: "web-search-agent-01", capabilities: ["web-search"], mcpEnabled: true}
     deactivate WebSearch
@@ -346,15 +346,15 @@ sequenceDiagram
     Frontend->>Frontend: Render Agent Cards<br/>- Status indicators<br/>- Capabilities<br/>- Supported task types
 ```
 
-### A2A
+### Gateway API Communication
 
-The system implements unified Mastra A2A protocol across all agents:
+The system implements REST API for Gateway and Mastra A2A protocol for other agents:
 
 **For Express Server Agent (Gateway):**
-1. **Custom A2A Discovery** - HTTP endpoint `/api/a2a/agent` for agent capability discovery
-2. **Custom Message Exchange** - HTTP POST `/api/a2a/message` for synchronous communication
-3. **Custom Task Management** - HTTP POST `/api/a2a/task` for asynchronous processing
-4. **Custom Task Streaming** - HTTP GET `/api/a2a/task/{id}` for task progress polling
+1. **REST API Discovery** - HTTP endpoint `/api/gateway/info` for agent capability discovery
+2. **REST API Message Exchange** - HTTP POST `/api/gateway/message` for synchronous communication
+3. **REST API Task Management** - HTTP POST `/api/gateway/task` for asynchronous processing
+4. **REST API Task Streaming** - HTTP GET `/api/gateway/task/{id}` for task progress polling
 
 **For Mastra Dev Server Agents (Data Processor, Summarizer, Web Search):**
 1. **Agent Discovery** - `A2A.getAgentCard(agentId)` - Agent capability discovery
@@ -381,7 +381,7 @@ sequenceDiagram
     
     Note over Client,Summarizer: Workflow Execution Phase
     
-    Client->>Gateway: POST /api/a2a/agents<br/>{type: "analyze", data: {...}}
+    Client->>Gateway: POST /api/gateway/agents<br/>{type: "analyze", data: {...}}
     activate Gateway
     
     Gateway->>Gateway: Create Workflow Execution<br/>Generate traceId & workflowId
@@ -422,7 +422,7 @@ sequenceDiagram
     
     Note over Client,BraveAPI: Search Request Flow
     
-    Client->>Gateway: POST /api/a2a/agents<br/>{type: "web-search", query: "AI trends 2024"}
+    Client->>Gateway: POST /api/gateway/agents<br/>{type: "web-search", query: "AI trends 2024"}
     activate Gateway
     
     Gateway->>WebSearch: A2A.sendMessage({<br/>  to: "web-search-agent-01",<br/>  from: "gateway-agent-01",<br/>  content: {<br/>    type: "search",<br/>    query: "AI trends 2024",<br/>    options: {limit: 10}<br/>  }<br/>})
@@ -463,12 +463,12 @@ sequenceDiagram
     
     Note over Client,Summarizer: Phase 1: Research Initiation
     
-    Client->>Gateway: POST /api/a2a/agents<br/>{<br/>  type: "deep-research",<br/>  topic: "AI in healthcare 2024",<br/>  options: {depth: "comprehensive"}<br/>}
+    Client->>Gateway: POST /api/gateway/agents<br/>{<br/>  type: "deep-research",<br/>  topic: "AI in healthcare 2024",<br/>  options: {depth: "comprehensive"}<br/>}
     activate Gateway
     
     Gateway->>Gateway: Generate Research Plan<br/>taskId: "research-abc-123"<br/>phases: [search, analyze, synthesize]
     
-    Gateway-->>Client: {<br/>  taskId: "research-abc-123",<br/>  status: "initiated",<br/>  phases: ["search", "analyze", "synthesize"],<br/>  pollUrl: "/api/a2a/task/research-abc-123"<br/>}
+    Gateway-->>Client: {<br/>  taskId: "research-abc-123",<br/>  status: "initiated",<br/>  phases: ["search", "analyze", "synthesize"],<br/>  pollUrl: "/api/gateway/task/research-abc-123"<br/>}
     
     Note over Gateway,Summarizer: Phase 2: Initial Web Search (Async)
     
@@ -479,7 +479,7 @@ sequenceDiagram
     
     Note over Client,WebSearch: Client Polling During Search Phase
     
-    Client->>Gateway: GET /api/a2a/task/research-abc-123
+    Client->>Gateway: GET /api/gateway/task/research-abc-123
     Gateway->>WebSearch: A2A.streamTaskUpdates("search-sub-task-1")
     WebSearch-->>Gateway: {status: "working", progress: 30, phase: "web-search"}
     Gateway-->>Client: {<br/>  status: "working",<br/>  currentPhase: "search",<br/>  progress: 30,<br/>  details: "Searching web sources..."<br/>}
@@ -496,7 +496,7 @@ sequenceDiagram
     
     DataProcessor-->>Gateway: {<br/>  taskId: "analyze-sub-task-2",<br/>  status: "accepted",<br/>  estimatedTime: "3-4 minutes"<br/>}
     
-    Client->>Gateway: GET /api/a2a/task/research-abc-123
+    Client->>Gateway: GET /api/gateway/task/research-abc-123
     Gateway->>DataProcessor: A2A.streamTaskUpdates("analyze-sub-task-2")
     DataProcessor-->>Gateway: {status: "working", progress: 60, phase: "analysis"}
     Gateway-->>Client: {<br/>  status: "working",<br/>  currentPhase: "analyze",<br/>  progress: 60,<br/>  details: "Analyzing patterns and trends..."<br/>}
@@ -513,7 +513,7 @@ sequenceDiagram
     
     Summarizer-->>Gateway: {<br/>  taskId: "synthesis-sub-task-3",<br/>  status: "accepted",<br/>  estimatedTime: "2-3 minutes"<br/>}
     
-    Client->>Gateway: GET /api/a2a/task/research-abc-123
+    Client->>Gateway: GET /api/gateway/task/research-abc-123
     Gateway->>Summarizer: A2A.streamTaskUpdates("synthesis-sub-task-3")
     Summarizer-->>Gateway: {status: "working", progress: 85, phase: "synthesis"}
     Gateway-->>Client: {<br/>  status: "working",<br/>  currentPhase: "synthesize",<br/>  progress: 85,<br/>  details: "Generating comprehensive report..."<br/>}
@@ -527,7 +527,7 @@ sequenceDiagram
     
     Note over Client,Summarizer: Phase 5: Research Completion
     
-    Client->>Gateway: GET /api/a2a/task/research-abc-123
+    Client->>Gateway: GET /api/gateway/task/research-abc-123
     Gateway-->>Client: {<br/>  taskId: "research-abc-123",<br/>  status: "completed",<br/>  totalDuration: "8 minutes 23 seconds",<br/>  result: {<br/>    executiveSummary: "...",<br/>    detailedFindings: {...},<br/>    sourcesAnalyzed: 50,<br/>    trendsIdentified: 12,<br/>    recommendations: [...],<br/>    confidence: 0.92,<br/>    methodology: "multi-agent-research"<br/>  },<br/>  metadata: {<br/>    phases: ["search", "analyze", "synthesize"],<br/>    agentsUsed: ["web-search", "data-processor", "summarizer"],<br/>    processingTime: {<br/>      search: "2m 15s",<br/>      analysis: "3m 42s",<br/>      synthesis: "2m 26s"<br/>    }<br/>  }<br/>}
     deactivate Gateway
 ```
@@ -560,7 +560,7 @@ Agent services use a hybrid architecture:
 
 **Express Server Agent (Gateway):**
 - **Express Server**: Node.js-based server (started with `node dist/index.js`)
-- **Custom A2A Protocol**: Custom HTTP-based A2A communication protocol
+- **REST API Protocol**: Standard HTTP-based REST API communication
 - **Custom Storage**: Application-specific data management
 - **Docker Container**: Isolated deployment for frontend communication
 
@@ -576,7 +576,7 @@ With the substantial migration to Mastra architecture:
 
 **Achieved Benefits:**
 - **Multi-Agent Modernization**: Data Processor, Summarizer, and Web Search agents use native Mastra A2A
-- **Hybrid Flexibility**: Express for Gateway (frontend communication), Mastra for processing agents
+- **Hybrid Flexibility**: Express with REST API for Gateway (frontend communication), Mastra for processing agents
 - **MCP Protocol Support**: Advanced web search capabilities through Model Context Protocol
 - **Unified Processing**: Consistent Mastra Dev Server for all data processing agents
 

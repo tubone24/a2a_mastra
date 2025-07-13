@@ -16,8 +16,8 @@ const AGENT_IDS = {
   'web-search': process.env.WEB_SEARCH_AGENT_ID || 'web-search-agent-01',
 };
 
-// Agent Card endpoint (A2A discovery)
-router.get('/agent', (req, res) => {
+// Agent Card endpoint (Gateway info)
+router.get('/info', (req, res) => {
   res.json({
     id: AGENT_ID,
     name: AGENT_NAME,
@@ -32,7 +32,7 @@ router.get('/agent', (req, res) => {
   });
 });
 
-// A2A Message handling endpoint
+// Message handling endpoint
 router.post('/message', async (req, res) => {
   try {
     console.log(`${AGENT_NAME} received A2A message:`, req.body);
@@ -125,7 +125,7 @@ router.post('/message', async (req, res) => {
   }
 });
 
-// A2A Task creation endpoint
+// Task creation endpoint
 router.post('/task', async (req, res) => {
   try {
     console.log(`${AGENT_NAME} received A2A task:`, req.body);
@@ -191,7 +191,7 @@ router.post('/task', async (req, res) => {
   }
 });
 
-// A2A Get Task endpoint
+// Get Task endpoint
 router.get('/task/:taskId', (req, res) => {
   const { taskId } = req.params;
   
@@ -273,7 +273,7 @@ router.get('/task/:taskId', (req, res) => {
   });
 });
 
-// A2A Cancel Task endpoint
+// Cancel Task endpoint
 router.delete('/task/:taskId', (req, res) => {
   const { taskId } = req.params;
   

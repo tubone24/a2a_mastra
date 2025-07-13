@@ -69,7 +69,7 @@ export default function HomePage() {
 
     const poll = async () => {
       try {
-        const res = await fetch(`/api/a2a/task/${taskId}`);
+        const res = await fetch(`/api/gateway/task/${taskId}`);
         if (res.ok) {
           const taskData = await res.json();
           console.log('📊 Polling taskData received:', taskData);
@@ -197,7 +197,7 @@ export default function HomePage() {
     try {
       // Deep Researchは新しいエンドポイントを使用
       const isDeepResearch = values.type === 'deep-research';
-      const endpoint = isDeepResearch ? '/api/a2a/agents' : '/api/request';
+      const endpoint = isDeepResearch ? '/api/gateway/agents' : '/api/request';
       
       const requestBody = isDeepResearch ? {
         type: values.type,
@@ -824,10 +824,10 @@ React Server Components 使い方`}
                 <div className="p-3 bg-blue-50 rounded-md">
                   <h4 className="font-medium text-blue-900 mb-2">標準エンドポイント</h4>
                   <div className="text-sm text-blue-700 space-y-1">
-                    <div><code>/api/a2a/agent</code> - エージェント情報</div>
-                    <div><code>/api/a2a/message</code> - メッセージング</div>
-                    <div><code>/api/a2a/task</code> - タスク管理</div>
-                    <div><code>/api/a2a/agents</code> - エージェント一覧</div>
+                    <div><code>/api/gateway/info</code> - ゲートウェイ情報</div>
+                    <div><code>/api/gateway/message</code> - メッセージング</div>
+                    <div><code>/api/gateway/task</code> - タスク管理</div>
+                    <div><code>/api/gateway/agents</code> - エージェント一覧</div>
                   </div>
                 </div>
               </CardContent>

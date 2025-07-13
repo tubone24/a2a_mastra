@@ -40,8 +40,8 @@ const AGENT_NAME = process.env.AGENT_NAME || 'Gateway Agent';
 
 // Mount routes
 app.use('/api/request', requestHandler);
-app.use('/api/a2a/agents', a2aAgentsHandler);
-app.use('/api/a2a', a2aRoutes);
+app.use('/api/gateway/agents', a2aAgentsHandler);
+app.use('/api/gateway', a2aRoutes);
 app.use('/api/workflows', workflowRoutes);
 
 // Health check endpoint
@@ -81,6 +81,6 @@ process.on('SIGTERM', async () => {
 // Start server
 app.listen(PORT, () => {
   console.log(`${AGENT_NAME} (${AGENT_ID}) listening on port ${PORT}`);
-  console.log(`A2A Protocol endpoints available at http://localhost:${PORT}/api/a2a/`);
+  console.log(`Gateway endpoints available at http://localhost:${PORT}/api/gateway/`);
   console.log(`Langfuse tracing enabled`);
 });

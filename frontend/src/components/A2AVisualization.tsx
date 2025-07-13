@@ -78,7 +78,7 @@ export function A2AVisualization({ isActive, taskType, workflowExecutionId, task
   const fetchTaskData = async (taskId: string) => {
     console.log('🔍 Fetching Deep Research task data for task ID:', taskId)
     try {
-      const response = await fetch(`/api/a2a/task/${taskId}`)
+      const response = await fetch(`/api/gateway/task/${taskId}`)
       console.log('📡 Task API response status:', response.status)
       if (response.ok) {
         const taskData = await response.json()
@@ -212,7 +212,7 @@ export function A2AVisualization({ isActive, taskType, workflowExecutionId, task
       details: {
         request: workflowStep.input,
         response: workflowStep.output,
-        endpoint: '/api/a2a/message',
+        endpoint: '/api/gateway/message',
         method: 'POST',
         duration: workflowStep.duration || 0
       }
@@ -317,7 +317,7 @@ export function A2AVisualization({ isActive, taskType, workflowExecutionId, task
               request: `${p} phase request`,
               response: taskData.result ? JSON.stringify(taskData.result, null, 2) : `${p} completed`,
               method: 'POST',
-              endpoint: '/api/a2a/task',
+              endpoint: '/api/gateway/task',
               duration: 2000
             } : undefined
           }

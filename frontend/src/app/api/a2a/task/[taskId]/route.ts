@@ -8,7 +8,7 @@ export async function GET(
     const { taskId } = await params
     const gatewayUrl = process.env.GATEWAY_URL || 'http://gateway:3001'
     
-    const response = await fetch(`${gatewayUrl}/api/a2a/task/${taskId}`, {
+    const response = await fetch(`${gatewayUrl}/api/gateway/task/${taskId}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',

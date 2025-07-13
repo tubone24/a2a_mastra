@@ -141,7 +141,7 @@ export function AgentDiscovery() {
     
     try {
       // Get gateway info and connected agents
-      const response = await fetch('/api/a2a/agents')
+      const response = await fetch('/api/gateway/agents')
       
       if (!response.ok) {
         throw new Error(`Failed to discover agents: ${response.statusText}`)
@@ -341,7 +341,7 @@ export function AgentDiscovery() {
           <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
             <div className="text-xs text-blue-700 space-y-1">
               <div className="font-medium">💡 エージェント発見について:</div>
-              <div>• Gateway Agentが/api/a2a/agentsエンドポイント経由でエージェントを検索</div>
+              <div>• Gateway Agentが/api/gateway/agentsエンドポイント経由でエージェントを検索</div>
               <div>• 各エージェントの能力、対応タスク、プロトコル情報を表示</div>
             </div>
           </div>

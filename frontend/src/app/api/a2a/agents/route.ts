@@ -5,7 +5,7 @@ export async function POST(request: Request) {
     const body = await request.json()
     const gatewayUrl = process.env.GATEWAY_URL || 'http://gateway:3001'
     
-    const response = await fetch(`${gatewayUrl}/api/a2a/agents`, {
+    const response = await fetch(`${gatewayUrl}/api/gateway/agents`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -37,7 +37,7 @@ export async function GET() {
   try {
     const gatewayUrl = process.env.GATEWAY_URL || 'http://gateway:3001'
     
-    const response = await fetch(`${gatewayUrl}/api/a2a/agents`, {
+    const response = await fetch(`${gatewayUrl}/api/gateway/agents`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
