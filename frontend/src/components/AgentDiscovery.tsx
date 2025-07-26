@@ -192,6 +192,7 @@ export function AgentDiscovery() {
 
   useEffect(() => {
     discoverAgents()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   return (

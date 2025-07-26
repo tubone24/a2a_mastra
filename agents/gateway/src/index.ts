@@ -7,6 +7,7 @@ import { requestHandler, langfuse } from './routes/requestHandler.js';
 import { a2aAgentsHandler } from './routes/a2aAgentsHandler.js';
 import { a2aRoutes } from './routes/a2aRoutes.js';
 import { workflowRoutes } from './routes/workflowRoutes.js';
+import { agentNetworkHandler } from './routes/agentNetworkHandler.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -43,6 +44,7 @@ app.use('/api/request', requestHandler);
 app.use('/api/gateway/agents', a2aAgentsHandler);
 app.use('/api/gateway', a2aRoutes);
 app.use('/api/workflows', workflowRoutes);
+app.use('/api/network', agentNetworkHandler);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -82,5 +84,6 @@ process.on('SIGTERM', async () => {
 app.listen(PORT, () => {
   console.log(`${AGENT_NAME} (${AGENT_ID}) listening on port ${PORT}`);
   console.log(`Gateway endpoints available at http://localhost:${PORT}/api/gateway/`);
+  console.log(`AgentNetwork endpoint available at http://localhost:${PORT}/api/network/`);
   console.log(`Langfuse tracing enabled`);
 });
