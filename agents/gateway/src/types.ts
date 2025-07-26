@@ -1,6 +1,6 @@
 export interface TaskRequest {
   id: string;
-  type: 'process' | 'summarize' | 'analyze' | 'web-search' | 'news-search' | 'scholarly-search' | 'deep-research';
+  type: 'process' | 'summarize' | 'analyze' | 'web-search' | 'news-search' | 'scholarly-search' | 'deep-research' | 'agent-network';
   payload: {
     data: any;
     context?: Record<string, any>;
@@ -57,7 +57,7 @@ export interface WorkflowStep {
 export interface WorkflowExecution {
   id: string;
   requestId: string;
-  type: 'process' | 'summarize' | 'analyze' | 'web-search' | 'news-search' | 'scholarly-search' | 'deep-research';
+  type: 'process' | 'summarize' | 'analyze' | 'web-search' | 'news-search' | 'scholarly-search' | 'deep-research' | 'agent-network';
   status: 'pending' | 'in_progress' | 'completed' | 'failed' | 'partial';
   steps: WorkflowStep[];
   metadata: {
