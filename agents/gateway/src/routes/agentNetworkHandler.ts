@@ -2,7 +2,7 @@ import express from 'express';
 import { z } from 'zod';
 import { randomUUID } from 'crypto';
 import { Langfuse } from 'langfuse';
-import { agentNetwork } from '../mastra/agents/gatewayAgent.js';
+import { agentNetwork, externalAgents, A2AAgentInfo } from '../mastra/agents/gatewayAgent.js';
 import { sendA2AMessage } from '../utils/mastraA2AClient.js';
 import { 
   createWorkflowExecution, 
@@ -84,8 +84,11 @@ router.post('/', async (req, res) => {
     let result: any;
 
     if (validatedRequest.options?.enableA2A) {
-      // Enhanced mode: Use AgentNetwork for coordination + A2A for actual execution
-      console.log('Running AgentNetwork with A2A integration...');
+      // Enhanced A2A mode: 
+      // 1. AgentNetwork (coordinator) analyzes task and creates execution plan
+      // 2. A2A communication executes the plan with actual external agents
+      console.log('Running AgentNetwork with True A2A integration...');
+      console.log('Available external agents:', externalAgents.map(a => a.id));
       
       const networkSpan = trace.span({
         name: 'agent-network-with-a2a',
