@@ -9,7 +9,7 @@ let executionCounter = 0;
 
 export function createWorkflowExecution(
   requestId: string,
-  type: 'process' | 'summarize' | 'analyze' | 'web-search' | 'news-search' | 'scholarly-search' | 'deep-research',
+  type: 'process' | 'summarize' | 'analyze' | 'web-search' | 'news-search' | 'scholarly-search' | 'deep-research' | 'agent-network',
   initiatedBy: string,
   langfuseTraceId: string,
   dataSize?: number,

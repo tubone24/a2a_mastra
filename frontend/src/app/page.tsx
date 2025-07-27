@@ -16,6 +16,7 @@ import { Loader2, Send, CheckCircle, AlertCircle, Bot, Database, FileText, Searc
 import { A2AVisualization } from "@/components/A2AVisualization"
 import { AgentDiscovery } from "@/components/AgentDiscovery"
 import { AgentCommunicationTest } from "@/components/AgentCommunicationTest"
+import { AgentNetworkInterface } from "@/components/AgentNetworkInterface"
 
 const formSchema = z.object({
   type: z.enum(['process', 'summarize', 'analyze', 'web-search', 'news-search', 'scholarly-search', 'deep-research']),
@@ -49,7 +50,7 @@ export default function HomePage() {
   const [loading, setLoading] = useState(false)
   const [response, setResponse] = useState<ApiResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'demo' | 'discovery' | 'communication'>('demo')
+  const [activeTab, setActiveTab] = useState<'demo' | 'network' | 'discovery' | 'communication'>('demo')
   const [taskProgress, setTaskProgress] = useState<{progress: number, phase: string} | null>(null)
   const [currentTaskId, setCurrentTaskId] = useState<string | null>(null)
 
@@ -343,6 +344,16 @@ export default function HomePage() {
               onClick={() => setActiveTab('demo')}
             >
               A2Aデモ
+            </button>
+            <button
+              className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                activeTab === 'network'
+                  ? 'bg-white text-gray-900 shadow'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+              onClick={() => setActiveTab('network')}
+            >
+              AgentNetwork
             </button>
             <button
               className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
@@ -833,6 +844,10 @@ React Server Components 使い方`}
               </CardContent>
             </Card>
           </div>
+        )}
+
+        {activeTab === 'network' && (
+          <AgentNetworkInterface />
         )}
 
         {activeTab === 'communication' && (
