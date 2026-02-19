@@ -14,7 +14,7 @@
     "@mastra/client-js": "latest",
     "@mastra/mcp": "latest",
     "@ai-sdk/amazon-bedrock": "^2.2.11",
-    "ai": "^4.0.0",
+    "ai": "^6.0.92",
     "zod": "^3.23.8",
     "dotenv": "^16.4.7",
     "langfuse": "^3.37.6",
