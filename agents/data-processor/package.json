@@ -14,8 +14,8 @@
     "mastra": "latest",
     "@mastra/client-js": "latest",
     "@ai-sdk/amazon-bedrock": "^2.2.11",
-    "ai": "^4.0.0",
-    "express": "^4.21.2",
+    "ai": "^5.0.52",
+    "express": "^4.22.1",
     "zod": "^3.23.8",
     "dotenv": "^16.4.7",
     "langfuse": "^3.37.6"
