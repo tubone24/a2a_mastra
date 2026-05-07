@@ -14,11 +14,11 @@
     "@mastra/client-js": "latest",
     "@mastra/mcp": "latest",
     "@ai-sdk/amazon-bedrock": "^2.2.11",
-    "ai": "^4.0.0",
+    "ai": "^5.0.52",
     "zod": "^3.23.8",
     "dotenv": "^16.4.7",
     "langfuse": "^3.37.6",
-    "axios": "^1.7.9"
+    "axios": "^1.16.0"
   },
   "devDependencies": {
     "tsx": "^4.20.3",
