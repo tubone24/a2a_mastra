@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/tubone24-a2a-mastra-badge.png)](https://mseep.ai/app/tubone24-a2a-mastra)
+
 # A2A Mastra Demo - Multi-Agent System with Amazon Bedrock
 
 A demonstration of Agent-to-Agent (A2A) communication protocol using the Mastra framework, featuring multiple specialized AI agents powered by Amazon Bedrock. This project showcases how autonomous agents can communicate, collaborate, and delegate tasks to achieve complex goals.
